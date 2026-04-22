@@ -382,6 +382,7 @@ function renderSpecTags(card, product) {
   if (specs.radiatorSize) tags.push(`${specs.radiatorSize}mm`);
   if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) tags.push(specs.supportedSockets.slice(0, 3).join("/"));
   if (specs.heatRating) tags.push(`${specs.heatRating}W TDP`);
+  if (specs.inferredCapacity?.label) tags.push(specs.inferredCapacity.label);
   if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) tags.push(`${specs.m2Slots.length} M.2`);
   if (specs.sataPorts) tags.push(`${specs.sataPorts} SATA`);
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
@@ -487,6 +488,7 @@ function productDetailValues(product) {
   if (specs.color) values.push(specs.color);
   if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) values.push(`Sockets: ${specs.supportedSockets.join(", ")}`);
   if (specs.heatRating) values.push(`${specs.heatRating}W heat rating`);
+  if (!specs.heatRating && specs.inferredCapacity?.label) values.push(specs.inferredCapacity.label);
   if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) values.push(`${specs.m2Slots.length} M.2 slots`);
   if (Array.isArray(specs.pcieSlots) && specs.pcieSlots.length > 0) values.push(`${specs.pcieSlots.length} PCIe slots`);
   if (specs.sataPorts) values.push(`${specs.sataPorts} SATA`);
@@ -609,7 +611,18 @@ function updateCompatibility() {
         addCheck(checks, "warn", `Cooler heat rating ${heatRating}W is close to or below the estimated ${cpuWatts}W CPU load.`);
       }
     } else if (cooler.detailSource) {
-      addCheck(checks, "warn", "Cooler heat rating was not listed on the Jimms product page.");
+      const capacity = cooler.specs?.inferredCapacity;
+      if (capacity?.tier === "high" && cpuWatts <= 170) {
+        addCheck(checks, "ok", `Jimms does not list a heat rating, but this is a ${capacity.label}, which is a reasonable class for the estimated ${cpuWatts}W CPU load.`);
+      } else if (capacity?.tier === "high") {
+        addCheck(checks, "warn", `Jimms does not list a heat rating. This is a ${capacity.label}, but confirm reviews/manufacturer specs for an estimated ${cpuWatts}W CPU load.`);
+      } else if (capacity?.tier === "medium" && cpuWatts <= 125) {
+        addCheck(checks, "ok", `Jimms does not list a heat rating, but this ${capacity.label} is a reasonable class for the estimated ${cpuWatts}W CPU load.`);
+      } else if (capacity?.label) {
+        addCheck(checks, "warn", `Jimms does not list a heat rating. The cooler appears to be ${capacity.label}; confirm manufacturer specs for an estimated ${cpuWatts}W CPU load.`);
+      } else {
+        addCheck(checks, "info", "Jimms does not list a cooler heat rating for this product.");
+      }
     }
 
     if (coolerType === "AIO" && radiator > 0) {
@@ -618,7 +631,7 @@ function updateCompatibility() {
       } else {
         addCheck(checks, "ok", `${radiator}mm AIO is a reasonable cooler class for the selected CPU.`);
       }
-    } else if (cpuWatts >= 170) {
+    } else if (cpuWatts >= 170 && !heatRating) {
       addCheck(checks, "warn", "High-power CPU selected. Prefer a cooler with a clearly listed high heat rating.");
     } else {
       addCheck(checks, "info", "Air cooler physical clearance still depends on case and RAM height.");

@@ -298,6 +298,26 @@ function detectHeatRating(text) {
   return null;
 }
 
+function inferCoolerCapacity(text, category) {
+  const radiatorSize = detectRadiatorSize(text);
+  if (category === "aio" || /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text)) {
+    if (radiatorSize >= 360) return { tier: "high", label: `${radiatorSize}mm AIO class` };
+    if (radiatorSize >= 240) return { tier: "medium", label: `${radiatorSize}mm AIO class` };
+    if (radiatorSize) return { tier: "entry", label: `${radiatorSize}mm AIO class` };
+    return { tier: "medium", label: "AIO class" };
+  }
+
+  if (/NH-D15|Peerless Assassin|Phantom Spirit|dual tower|kaksoistorni|2\s*x\s*120mm/i.test(text)) {
+    return { tier: "high", label: "high-capacity air cooler class" };
+  }
+
+  if (/tower|tornimallinen|120mm/i.test(text)) {
+    return { tier: "medium", label: "tower air cooler class" };
+  }
+
+  return { tier: "unknown", label: "air cooler class" };
+}
+
 function extractDescriptionHtml(html) {
   const match = html.match(/<div itemprop="description">([\s\S]*?)<\/div>\s*<div class="my-2">/i)
     || html.match(/<div itemprop="description">([\s\S]*?)<\/div>/i);
@@ -305,6 +325,12 @@ function extractDescriptionHtml(html) {
 
   const meta = html.match(/<meta\s+(?:property|name)="(?:og:description|description)"\s+content="([^"]*)"/i);
   return meta ? meta[1] : "";
+}
+
+function extractMetaTitle(html) {
+  const match = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i)
+    || html.match(/<title>([\s\S]*?)<\/title>/i);
+  return match ? decodeHtml(match[1]) : "";
 }
 
 function parseMotherboardDetails(text) {
@@ -339,9 +365,11 @@ function parseCoolerDetails(text) {
   const specs = {};
   const supportedSockets = detectSupportedSockets(text);
   const heatRating = detectHeatRating(text);
+  const inferredCapacity = inferCoolerCapacity(text, /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text) ? "aio" : "cooler");
 
   if (supportedSockets.length > 0) specs.supportedSockets = supportedSockets;
   if (heatRating) specs.heatRating = heatRating;
+  specs.inferredCapacity = inferredCapacity;
 
   return specs;
 }
@@ -371,10 +399,11 @@ async function fetchProductDetails(category, sourceUrl) {
 
   const html = await response.text();
   const detailText = textFromHtml(extractDescriptionHtml(html));
+  const titleText = extractMetaTitle(html);
   const specs = {};
 
   if (category === "cooler" || category === "aio") {
-    Object.assign(specs, parseCoolerDetails(detailText || html));
+    Object.assign(specs, parseCoolerDetails(`${titleText}\n${detailText || ""}`));
   }
 
   if (category === "motherboard") {
