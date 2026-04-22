@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jimms Part Picker</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Jimms Part Picker home">
+        <span class="brand-mark">JP</span>
+        <span>
+          <strong>Jimms Part Picker</strong>
+          <small>Finnish PC builds, Jimms.fi prices</small>
+        </span>
+      </a>
+      <div class="source-pill" id="sourcePill">Jimms.fi source</div>
+    </header>
+
+    <main class="layout">
+      <section class="builder" aria-label="PC build list">
+        <div class="builder-head">
+          <div>
+            <h1>Build List</h1>
+            <p>Pick each component from Jimms.fi listings and keep a running total.</p>
+          </div>
+          <button class="ghost-button" id="clearBuild" type="button" title="Clear all selected parts">Clear</button>
+        </div>
+
+        <div class="part-list" id="partList"></div>
+
+        <div class="summary">
+          <span>Total</span>
+          <strong id="totalPrice">0,00 €</strong>
+        </div>
+      </section>
+
+      <section class="catalog" aria-label="Jimms component catalog">
+        <div class="toolbar">
+          <div class="tabs" id="categoryTabs" role="tablist"></div>
+          <label class="search">
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="Ryzen, RTX, DDR5..." autocomplete="off">
+          </label>
+        </div>
+
+        <div class="catalog-head">
+          <div>
+            <h2 id="catalogTitle">CPU</h2>
+            <p id="catalogMeta">Loading Jimms.fi products...</p>
+          </div>
+          <a class="jimms-link" id="jimmsLink" href="https://www.jimms.fi/fi/Product/Komponentit" target="_blank" rel="noreferrer">Open on Jimms.fi</a>
+        </div>
+
+        <div class="products" id="products" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <template id="partRowTemplate">
+      <article class="part-row">
+        <button class="part-select" type="button"></button>
+        <div class="selected-part"></div>
+        <div class="part-price"></div>
+        <button class="remove-button" type="button" title="Remove selected part">×</button>
+      </article>
+    </template>
+
+    <template id="productTemplate">
+      <article class="product-card">
+        <div class="product-visual" aria-hidden="true"></div>
+        <div class="product-copy">
+          <h3></h3>
+          <p class="sku"></p>
+          <p class="desc"></p>
+          <p class="stock"></p>
+        </div>
+        <div class="product-actions">
+          <strong class="price"></strong>
+          <button type="button">Add</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

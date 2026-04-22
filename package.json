@@ -1,0 +1,19 @@
+{
+  "name": "jimms-part-picker",
+  "version": "1.0.0",
+  "description": "A PC part picker interface that sources component listings and prices from Jimms.fi.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "pc-builder",
+    "jimms",
+    "parts"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
