@@ -1,7 +1,6 @@
 const categories = [
   ["cpu", "CPU"],
-  ["cooler", "CPU Cooler"],
-  ["aio", "AIO Cooler"],
+  ["cooling", "CPU Cooling"],
   ["gpu", "GPU"],
   ["motherboard", "Motherboard"],
   ["memory", "Memory"],
@@ -12,6 +11,7 @@ const categories = [
 
 const jimmsUrls = {
   cpu: "https://www.jimms.fi/fi/Product/List/000-00R",
+  cooling: "https://www.jimms.fi/fi/Product/List/000-059",
   cooler: "https://www.jimms.fi/fi/Product/List/000-059",
   aio: "https://www.jimms.fi/fi/Product/List/000-1KG",
   gpu: "https://www.jimms.fi/fi/Product/List/000-00P",
@@ -24,6 +24,7 @@ const jimmsUrls = {
 
 const state = {
   activeCategory: "cpu",
+  activeProductCategory: "cpu",
   selected: Object.fromEntries(categories.map(([key]) => [key, null])),
   products: [],
   displayedProducts: []
@@ -71,6 +72,20 @@ function categoryLabel(key) {
   return categories.find(([id]) => id === key)?.[1] || key;
 }
 
+function productCategoryLabel(key) {
+  if (key === "cooler") return "Air Coolers";
+  if (key === "aio") return "AIO Coolers";
+  return categoryLabel(key);
+}
+
+function selectableCategoryForProduct(productCategory) {
+  return productCategory === "cooler" || productCategory === "aio" ? "cooling" : productCategory;
+}
+
+function productCategoriesForTab(key) {
+  return key === "cooling" ? ["cooler", "aio"] : [key];
+}
+
 function resetFilters() {
   sortSelect.value = "featured";
   brandFilter.value = "";
@@ -91,6 +106,7 @@ function renderTabs() {
     button.setAttribute("aria-selected", String(key === state.activeCategory));
     button.addEventListener("click", () => {
       state.activeCategory = key;
+      state.activeProductCategory = productCategoriesForTab(key)[0];
       searchInput.value = "";
       resetFilters();
       renderTabs();
@@ -115,6 +131,7 @@ function renderPartRows() {
     select.classList.toggle("active", key === state.activeCategory);
     select.addEventListener("click", () => {
       state.activeCategory = key;
+      state.activeProductCategory = productCategoriesForTab(key)[0];
       renderTabs();
       renderPartRows();
       loadProducts();
@@ -163,7 +180,7 @@ function renderProducts() {
     }
     renderSpecTags(card, product);
     card.querySelector("button").addEventListener("click", () => {
-      state.selected[state.activeCategory] = product;
+      state.selected[selectableCategoryForProduct(product.category)] = product;
       renderPartRows();
     });
     productsEl.append(card);
@@ -179,18 +196,23 @@ async function loadProducts() {
   const query = searchInput.value.trim();
   const label = categoryLabel(state.activeCategory);
   catalogTitle.textContent = label;
-  jimmsLink.href = jimmsUrls[state.activeCategory];
+  jimmsLink.href = jimmsUrls[state.activeProductCategory] || jimmsUrls[state.activeCategory];
 
   try {
-    const response = await fetch(`/api/products?category=${encodeURIComponent(state.activeCategory)}&q=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error(`Request failed with ${response.status}`);
-    const data = await response.json();
-    state.products = data.products || [];
+    const productCategories = productCategoriesForTab(state.activeCategory);
+    const responses = await Promise.all(productCategories.map(async (category) => {
+      const response = await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+      return response.json();
+    }));
+    state.products = responses.flatMap((data) => data.products || []);
     populateFilterOptions();
     applyProductFilters();
-    const total = data.total || state.products.length;
+    const total = responses.reduce((sum, data) => sum + (data.total || data.products?.length || 0), 0);
     updateCatalogMeta(total, label);
-    sourcePill.textContent = data.source || "Jimms.fi";
+    sourcePill.textContent = responses.length > 1
+      ? responses.map((data) => `${data.categoryLabel}: ${data.total}`).join(" | ")
+      : responses[0]?.source || "Jimms.fi";
     renderProducts();
   } catch (error) {
     state.products = [];
@@ -202,7 +224,8 @@ async function loadProducts() {
 }
 
 function updateCatalogMeta(total, label) {
-  catalogMeta.textContent = `${state.displayedProducts.length} shown from ${total} ${label.toLowerCase()} products`;
+  const detail = state.activeCategory === "cooling" ? "air + AIO" : label.toLowerCase();
+  catalogMeta.textContent = `${state.displayedProducts.length} shown from ${total} ${detail} products`;
 }
 
 function getSpecValues(product) {
@@ -383,8 +406,8 @@ function updateCompatibility() {
     }
   }
 
-  if (parts.cpu && (parts.cooler || parts.aio)) {
-    const cooler = parts.aio || parts.cooler;
+  if (parts.cpu && parts.cooling) {
+    const cooler = parts.cooling;
     const coolerType = cooler.specs?.coolerType || "cooler";
     const cpuWatts = parts.cpu.specs?.estimatedWatts || 0;
     const radiator = cooler.specs?.radiatorSize || 0;
@@ -416,8 +439,8 @@ function updateCompatibility() {
     }
   }
 
-  if (parts.case && parts.aio?.specs?.radiatorSize) {
-    addCheck(checks, "info", `Confirm the case has clearance for a ${parts.aio.specs.radiatorSize}mm radiator.`);
+  if (parts.case && parts.cooling?.specs?.radiatorSize) {
+    addCheck(checks, "info", `Confirm the case has clearance for a ${parts.cooling.specs.radiatorSize}mm radiator.`);
   }
 
   if (parts.psu) {
