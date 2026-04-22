@@ -196,6 +196,22 @@ function detectPsuWattage(text) {
   return match ? Number(match[1]) : null;
 }
 
+function detectCpuFrequency(text) {
+  const match = text.match(/\b(\d+(?:[.,]\d+)?)\s*GHz\b/i);
+  return match ? `${match[1].replace(",", ".")} GHz` : null;
+}
+
+function detectCpuCores(text) {
+  const match = text.match(/\b(\d{1,2})\s*-?\s*Core\b/i);
+  return match ? `${match[1]}-Core` : null;
+}
+
+function detectPackageType(text) {
+  if (/\bBoxed\b/i.test(text)) return "Boxed";
+  if (/\bWOF\b/i.test(text)) return "WOF";
+  return null;
+}
+
 function detectRadiatorSize(text) {
   const match = text.match(/\b(120|140|240|280|360|420)\s*mm\b/i);
   return match ? Number(match[1]) : null;
@@ -235,6 +251,9 @@ function deriveSpecs(item) {
 
   if (item.category === "cpu") {
     specs.socket = detectSocket(text);
+    specs.frequency = detectCpuFrequency(text);
+    specs.cores = detectCpuCores(text);
+    specs.packageType = detectPackageType(text);
     specs.estimatedWatts = estimateCpuWatts(text);
   }
 
@@ -272,10 +291,12 @@ function deriveSpecs(item) {
 
 function mapApiProduct(apiProduct, category) {
   const name = [apiProduct.VendorName, apiProduct.Name].filter(Boolean).join(" ");
+  const displayName = buildDisplayName(apiProduct, category);
   const item = {
     id: `${category}-${apiProduct.Code || apiProduct.ProductGuid || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
     category,
     name,
+    displayName,
     brand: apiProduct.VendorName || "",
     sku: apiProduct.Code || "",
     price: formatEuro(apiProduct.PriceTax ?? apiProduct.Price),
@@ -290,6 +311,31 @@ function mapApiProduct(apiProduct, category) {
   };
   item.specs = deriveSpecs(item);
   return item;
+}
+
+function buildDisplayName(apiProduct, category) {
+  const brand = apiProduct.VendorName || "";
+  let baseName = apiProduct.Name || "";
+
+  if (category === "cpu") {
+    baseName = baseName
+      .replace(/,\s*(AM[45]|LGA\s?\d{4,5}|STR5|STRX4|TR4|SP3)\b/gi, "")
+      .replace(/,\s*\d+(?:[.,]\d+)?\s*GHz\b/gi, "")
+      .replace(/,\s*\d{1,2}\s*-?\s*Core\b/gi, "")
+      .replace(/,\s*(WOF|Boxed)\b/gi, "");
+  }
+
+  if (category === "memory") {
+    baseName = baseName
+      .replace(/,\s*DDR[3-6]\s*\d+\s*MHz\b/gi, "")
+      .replace(/,\s*CL\d+\b/gi, "");
+  }
+
+  if (category === "motherboard") {
+    baseName = baseName.replace(/,\s*(ATX|mATX|Micro-ATX|Mini-ITX|E-ATX)-?emolevy\b/gi, "");
+  }
+
+  return [brand, baseName.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim()].filter(Boolean).join(" ");
 }
 
 async function fetchJsonPage(categoryKey, page) {

@@ -169,8 +169,9 @@ function renderProducts() {
   state.displayedProducts.forEach((product) => {
     const card = productTemplate.content.firstElementChild.cloneNode(true);
     const visual = card.querySelector(".product-visual");
-    card.querySelector("h3").textContent = product.name;
+    card.querySelector("h3").textContent = product.displayName || cleanProductName(product);
     card.querySelector(".sku").textContent = product.sku || "Jimms.fi product";
+    renderProductDetails(card, product);
     card.querySelector(".desc").textContent = product.description || categoryLabel(product.category);
     card.querySelector(".stock").textContent = product.availability || "Availability on Jimms.fi";
     card.querySelector(".price").textContent = product.price;
@@ -354,6 +355,70 @@ function renderSpecTags(card, product) {
     tagWrap.append(chip);
   });
   card.querySelector(".product-copy").append(tagWrap);
+}
+
+function cleanProductName(product) {
+  let name = product.name || "";
+  const brand = product.brand || "";
+  if (brand && name.toLowerCase().startsWith(`${brand.toLowerCase()} `)) {
+    name = name.slice(brand.length).trim();
+  }
+
+  if (product.category === "cpu") {
+    name = name
+      .replace(/,\s*(AM[45]|LGA\s?\d{4,5}|STR5|STRX4|TR4|SP3)\b/gi, "")
+      .replace(/,\s*\d+(?:[.,]\d+)?\s*GHz\b/gi, "")
+      .replace(/,\s*\d{1,2}\s*-?\s*Core\b/gi, "")
+      .replace(/,\s*(WOF|Boxed)\b/gi, "");
+  }
+
+  return [brand, name.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim()].filter(Boolean).join(" ");
+}
+
+function productDetailValues(product) {
+  const specs = product.specs || {};
+  const values = [];
+  const source = `${product.name || ""} ${product.description || ""}`;
+
+  if (specs.socket) values.push(specs.socket);
+  if (specs.frequency) values.push(specs.frequency);
+  if (specs.cores) values.push(specs.cores);
+  if (specs.packageType) values.push(specs.packageType);
+  if (specs.memoryType) values.push(specs.memoryType);
+  if (specs.formFactor) values.push(specs.formFactor);
+  if (specs.coolerType) values.push(specs.coolerType);
+  if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
+  if (specs.wattage) values.push(`${specs.wattage}W`);
+  if (specs.estimatedWatts) values.push(`~${specs.estimatedWatts}W`);
+
+  const pcie = source.match(/\bPCIe\s*\d(?:\.\d)?(?:\s*x\d+)?\b/i);
+  if (pcie) values.push(pcie[0].replace(/\s+/g, " "));
+
+  const capacity = source.match(/\b\d+\s*(?:GB|TB)\b/i);
+  if (capacity) values.push(capacity[0].replace(/\s+/g, ""));
+
+  if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
+    values.push(`Fits ${specs.supportedFormFactors.join(", ")}`);
+  }
+
+  return [...new Set(values.filter(Boolean))];
+}
+
+function renderProductDetails(card, product) {
+  const detailWrap = card.querySelector(".product-details");
+  const values = productDetailValues(product);
+  detailWrap.innerHTML = "";
+
+  if (values.length === 0) {
+    detailWrap.hidden = true;
+    return;
+  }
+
+  values.slice(0, 7).forEach((value) => {
+    const item = document.createElement("span");
+    item.textContent = value;
+    detailWrap.append(item);
+  });
 }
 
 function estimateBuildWatts(parts) {
