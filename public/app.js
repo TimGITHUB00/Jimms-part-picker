@@ -386,6 +386,13 @@ function cleanProductName(product) {
       .replace(/,\s*(WOF|Boxed)\b/gi, "");
   }
 
+  if (product.category === "cooler" || product.category === "aio") {
+    name = name
+      .replace(/\s+-\s*prosessorijäähdytin\b/gi, "")
+      .replace(/\s+prosessorijäähdytin\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
   return [brand, name.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim()].filter(Boolean).join(" ");
 }
 
@@ -402,6 +409,7 @@ function productDetailValues(product) {
   if (specs.formFactor) values.push(specs.formFactor);
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
+  if (specs.color) values.push(specs.color);
   if (specs.wattage) values.push(`${specs.wattage}W`);
   if (specs.estimatedWatts) values.push(`~${specs.estimatedWatts}W`);
 

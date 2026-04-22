@@ -212,6 +212,11 @@ function detectPackageType(text) {
   return null;
 }
 
+function detectColorDescriptor(text) {
+  const match = text.match(/,\s*([^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*)$/i);
+  return match ? match[1].trim() : null;
+}
+
 function detectRadiatorSize(text) {
   const match = text.match(/\b(120|140|240|280|360|420)\s*mm\b/i);
   return match ? Number(match[1]) : null;
@@ -260,6 +265,7 @@ function deriveSpecs(item) {
   if (item.category === "cooler" || item.category === "aio") {
     specs.coolerType = detectCoolerType(text, item.category);
     specs.radiatorSize = detectRadiatorSize(text);
+    specs.color = detectColorDescriptor(item.name || "");
   }
 
   if (item.category === "gpu") {
@@ -333,6 +339,13 @@ function buildDisplayName(apiProduct, category) {
 
   if (category === "motherboard") {
     baseName = baseName.replace(/,\s*(ATX|mATX|Micro-ATX|Mini-ITX|E-ATX)-?emolevy\b/gi, "");
+  }
+
+  if (category === "cooler" || category === "aio") {
+    baseName = baseName
+      .replace(/\s+-\s*prosessorijäähdytin\b/gi, "")
+      .replace(/\s+prosessorijäähdytin\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
   }
 
   return [brand, baseName.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim()].filter(Boolean).join(" ");
