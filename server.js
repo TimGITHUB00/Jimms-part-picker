@@ -20,6 +20,7 @@ const categories = {
 };
 
 const cache = new Map();
+const detailCache = new Map();
 const cacheMs = 1000 * 60 * 12;
 const pageSize = 100;
 const maxPagesPerCategory = 30;
@@ -149,6 +150,10 @@ function stripHtml(html) {
     .filter(Boolean);
 }
 
+function textFromHtml(html) {
+  return stripHtml(html).join("\n");
+}
+
 function formatEuro(value) {
   return new Intl.NumberFormat("fi-FI", {
     style: "currency",
@@ -267,6 +272,118 @@ function detectRadiatorSize(text) {
 function detectCoolerType(text, category) {
   if (category === "aio" || /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text)) return "AIO";
   return "Air";
+}
+
+function detectSupportedSockets(text) {
+  const sockets = new Set();
+  const normalized = text.replace(/\b115X\b/gi, "LGA115x").replace(/\b20XX\b/gi, "LGA20xx");
+  for (const match of normalized.matchAll(/\b(AM[2-5]|FM[12]|LGA\s?\d{3,5}x?|TR4|sTRX4|STRX4|STR5|SP3|1200|1700|1851|1150|1151|1155|1156|2011|2066)\b/gi)) {
+    let socket = match[1].toUpperCase().replace(/\s+/g, "");
+    if (/^\d/.test(socket)) socket = `LGA${socket}`;
+    if (socket === "STRX4") socket = "sTRX4";
+    sockets.add(socket);
+  }
+  return [...sockets];
+}
+
+function detectHeatRating(text) {
+  const patterns = [
+    /\b(?:TDP|lämpöteho|heat\s*rating|cooling\s*capacity)[^\d]{0,30}(\d{2,4})\s*W\b/i,
+    /\b(\d{2,4})\s*W\s*(?:TDP|lämpöteho|heat\s*rating|cooling\s*capacity)\b/i
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function extractDescriptionHtml(html) {
+  const match = html.match(/<div itemprop="description">([\s\S]*?)<\/div>\s*<div class="my-2">/i)
+    || html.match(/<div itemprop="description">([\s\S]*?)<\/div>/i);
+  if (match) return match[1];
+
+  const meta = html.match(/<meta\s+(?:property|name)="(?:og:description|description)"\s+content="([^"]*)"/i);
+  return meta ? meta[1] : "";
+}
+
+function parseMotherboardDetails(text) {
+  const specs = {};
+  const pcieSlots = [...new Set([...text.matchAll(/\b\d+\s*x\s*PCIe\s*\d(?:\.\d)?\s*x\d+\s*slots?(?:\s*\([^)]*\))?/gi)].map((match) => match[0].replace(/\s+/g, " ")))];
+  const m2SlotMap = new Map();
+  for (const match of text.matchAll(/\b(M\.2_\d+)\s*slot[^\n<]*/gi)) {
+    const slotId = match[1].toUpperCase();
+    if (!m2SlotMap.has(slotId)) {
+      m2SlotMap.set(slotId, match[0].replace(/\s+/g, " ").trim());
+    }
+  }
+  let m2Slots = [...m2SlotMap.values()];
+  if (m2Slots.length === 0) {
+    const summary = text.match(/\b(\d+)\s*x?\s*M\.2[-\s]?paikkaa\b/i);
+    if (summary) {
+      m2Slots = Array.from({ length: Number(summary[1]) }, (_, index) => `M.2 slot ${index + 1}`);
+    }
+  }
+  const sataMatch = text.match(/\b(\d+)\s*x\s*SATA\s*6Gb\/s\s*ports?\b/i);
+  const memoryMatch = text.match(/\b(\d+)\s*x\s*DDR[3-6]\s*DIMM\b/i) || text.match(/\b(\d+)x\s*DDR[3-6]\s*muistipaikkaa\b/i);
+
+  if (pcieSlots.length > 0) specs.pcieSlots = pcieSlots.slice(0, 6);
+  if (m2Slots.length > 0) specs.m2Slots = m2Slots.slice(0, 6);
+  if (sataMatch) specs.sataPorts = Number(sataMatch[1]);
+  if (memoryMatch) specs.memorySlots = Number(memoryMatch[1]);
+
+  return specs;
+}
+
+function parseCoolerDetails(text) {
+  const specs = {};
+  const supportedSockets = detectSupportedSockets(text);
+  const heatRating = detectHeatRating(text);
+
+  if (supportedSockets.length > 0) specs.supportedSockets = supportedSockets;
+  if (heatRating) specs.heatRating = heatRating;
+
+  return specs;
+}
+
+async function fetchProductDetails(category, sourceUrl) {
+  if (!sourceUrl) return {};
+
+  const parsedUrl = new URL(sourceUrl, JIMMS_BASE);
+  if (parsedUrl.hostname !== "www.jimms.fi") return {};
+
+  const cacheKey = `${category}:${parsedUrl.href}`;
+  const cached = detailCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < cacheMs) {
+    return cached.details;
+  }
+
+  const response = await fetch(parsedUrl.href, {
+    headers: {
+      "User-Agent": "JimmsPartPicker/1.0 (+local development)",
+      "Accept-Language": "fi-FI,fi;q=0.9,en;q=0.8"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jimms.fi returned ${response.status}`);
+  }
+
+  const html = await response.text();
+  const detailText = textFromHtml(extractDescriptionHtml(html));
+  const specs = {};
+
+  if (category === "cooler" || category === "aio") {
+    Object.assign(specs, parseCoolerDetails(detailText || html));
+  }
+
+  if (category === "motherboard") {
+    Object.assign(specs, parseMotherboardDetails(detailText || html));
+  }
+
+  const details = { specs, detailSource: "jimms.fi product page" };
+  detailCache.set(cacheKey, { createdAt: Date.now(), details });
+  return details;
 }
 
 function estimateCpuWatts(text) {
@@ -571,6 +688,22 @@ const server = http.createServer(async (req, res) => {
       total: result.total,
       products: result.products
     });
+    return;
+  }
+
+  if (url.pathname === "/api/product-details") {
+    const category = url.searchParams.get("category") || "";
+    const sourceUrl = url.searchParams.get("url") || "";
+
+    try {
+      const details = await fetchProductDetails(category, sourceUrl);
+      sendJson(res, 200, details);
+    } catch (error) {
+      sendJson(res, 200, {
+        specs: {},
+        detailSource: `unavailable (${error.message})`
+      });
+    }
     return;
   }
 

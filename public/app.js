@@ -195,11 +195,36 @@ function renderProducts() {
     }
     renderSpecTags(card, product);
     card.querySelector("button").addEventListener("click", () => {
-      state.selected[selectableCategoryForProduct(product.category)] = product;
+      const slot = selectableCategoryForProduct(product.category);
+      state.selected[slot] = product;
       renderPartRows();
+      enrichSelectedProduct(slot, product);
     });
     productsEl.append(card);
   });
+}
+
+async function enrichSelectedProduct(slot, product) {
+  if (!["cooling", "motherboard"].includes(slot) || !product.sourceUrl) return;
+
+  try {
+    const response = await fetch(`/api/product-details?category=${encodeURIComponent(product.category)}&url=${encodeURIComponent(product.sourceUrl)}`);
+    if (!response.ok) return;
+    const details = await response.json();
+    if (state.selected[slot]?.id !== product.id) return;
+
+    state.selected[slot] = {
+      ...state.selected[slot],
+      specs: {
+        ...(state.selected[slot].specs || {}),
+        ...(details.specs || {})
+      },
+      detailSource: details.detailSource
+    };
+    renderPartRows();
+  } catch (error) {
+    console.warn("Could not load product details", error);
+  }
 }
 
 function setLoading() {
@@ -355,6 +380,10 @@ function renderSpecTags(card, product) {
   if (specs.estimatedWatts) tags.push(`~${specs.estimatedWatts}W`);
   if (specs.coolerType) tags.push(specs.coolerType);
   if (specs.radiatorSize) tags.push(`${specs.radiatorSize}mm`);
+  if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) tags.push(specs.supportedSockets.slice(0, 3).join("/"));
+  if (specs.heatRating) tags.push(`${specs.heatRating}W TDP`);
+  if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) tags.push(`${specs.m2Slots.length} M.2`);
+  if (specs.sataPorts) tags.push(`${specs.sataPorts} SATA`);
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
     tags.push(specs.supportedFormFactors.join("/"));
   }
@@ -456,6 +485,12 @@ function productDetailValues(product) {
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
   if (specs.color) values.push(specs.color);
+  if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) values.push(`Sockets: ${specs.supportedSockets.join(", ")}`);
+  if (specs.heatRating) values.push(`${specs.heatRating}W heat rating`);
+  if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) values.push(`${specs.m2Slots.length} M.2 slots`);
+  if (Array.isArray(specs.pcieSlots) && specs.pcieSlots.length > 0) values.push(`${specs.pcieSlots.length} PCIe slots`);
+  if (specs.sataPorts) values.push(`${specs.sataPorts} SATA`);
+  if (specs.memorySlots) values.push(`${specs.memorySlots} DIMM`);
   if (specs.capacity) values.push(specs.capacity);
   if (specs.speed) values.push(specs.speed);
   if (specs.casLatency) values.push(specs.casLatency);
@@ -551,6 +586,31 @@ function updateCompatibility() {
     const coolerType = cooler.specs?.coolerType || "cooler";
     const cpuWatts = parts.cpu.specs?.estimatedWatts || 0;
     const radiator = cooler.specs?.radiatorSize || 0;
+    const cpuSocket = parts.cpu.specs?.socket;
+    const supportedSockets = cooler.specs?.supportedSockets || [];
+    const heatRating = cooler.specs?.heatRating || 0;
+
+    if (cpuSocket && supportedSockets.length > 0) {
+      if (supportedSockets.includes(cpuSocket)) {
+        addCheck(checks, "ok", `CPU cooler supports ${cpuSocket}.`);
+      } else {
+        addCheck(checks, "error", `CPU cooler socket support does not list ${cpuSocket}. Listed sockets: ${supportedSockets.join(", ")}.`);
+      }
+    } else if (cooler.detailSource) {
+      addCheck(checks, "warn", "Cooler socket support was not found on the Jimms product page.");
+    } else {
+      addCheck(checks, "info", "Cooler socket support is loading from the Jimms product page.");
+    }
+
+    if (heatRating && cpuWatts) {
+      if (heatRating >= Math.ceil(cpuWatts * 1.15)) {
+        addCheck(checks, "ok", `Cooler heat rating ${heatRating}W covers the estimated ${cpuWatts}W CPU load.`);
+      } else {
+        addCheck(checks, "warn", `Cooler heat rating ${heatRating}W is close to or below the estimated ${cpuWatts}W CPU load.`);
+      }
+    } else if (cooler.detailSource) {
+      addCheck(checks, "warn", "Cooler heat rating was not listed on the Jimms product page.");
+    }
 
     if (coolerType === "AIO" && radiator > 0) {
       if (cpuWatts >= 170 && radiator < 280) {
@@ -559,9 +619,9 @@ function updateCompatibility() {
         addCheck(checks, "ok", `${radiator}mm AIO is a reasonable cooler class for the selected CPU.`);
       }
     } else if (cpuWatts >= 170) {
-      addCheck(checks, "warn", "High-power CPU selected. Confirm the air cooler's socket support and heat rating on Jimms.fi.");
+      addCheck(checks, "warn", "High-power CPU selected. Prefer a cooler with a clearly listed high heat rating.");
     } else {
-      addCheck(checks, "info", "CPU cooler socket support is not always listed in category data. Confirm socket support on the Jimms product page.");
+      addCheck(checks, "info", "Air cooler physical clearance still depends on case and RAM height.");
     }
   }
 
@@ -602,8 +662,30 @@ function updateCompatibility() {
     addCheck(checks, "info", "Add a PSU to check estimated wattage headroom.");
   }
 
-  if (parts.storage && parts.motherboard && /M\.2|NVMe/i.test(parts.storage.name + " " + parts.storage.description)) {
-    addCheck(checks, "info", "M.2/NVMe storage support depends on motherboard slot details. Open the Jimms motherboard page to confirm slots.");
+  if (parts.storage && parts.motherboard) {
+    const storageText = `${parts.storage.name || ""} ${parts.storage.description || ""}`;
+    const needsM2 = /M\.2|NVMe/i.test(storageText);
+    const needsSata = /\bSATA\b/i.test(storageText);
+    const m2Slots = parts.motherboard.specs?.m2Slots || [];
+    const sataPorts = parts.motherboard.specs?.sataPorts || 0;
+
+    if (needsM2) {
+      if (m2Slots.length > 0) {
+        addCheck(checks, "ok", `Motherboard lists ${m2Slots.length} M.2 slot${m2Slots.length === 1 ? "" : "s"} for M.2/NVMe storage.`);
+      } else if (parts.motherboard.detailSource) {
+        addCheck(checks, "warn", "Selected storage is M.2/NVMe, but no M.2 slot details were found on the motherboard page.");
+      } else {
+        addCheck(checks, "info", "Motherboard slot details are loading from the Jimms product page.");
+      }
+    }
+
+    if (needsSata) {
+      if (sataPorts > 0) {
+        addCheck(checks, "ok", `Motherboard lists ${sataPorts} SATA port${sataPorts === 1 ? "" : "s"}.`);
+      } else if (parts.motherboard.detailSource) {
+        addCheck(checks, "warn", "Selected storage appears to use SATA, but SATA port details were not found.");
+      }
+    }
   }
 
   renderCompatibility(checks);
