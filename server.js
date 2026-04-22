@@ -8,17 +8,19 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const JIMMS_BASE = "https://www.jimms.fi";
 
 const categories = {
-  cpu: { label: "CPU", url: "/fi/Product/List/000-00R" },
-  gpu: { label: "Graphics Card", url: "/fi/Product/List/000-00P" },
-  motherboard: { label: "Motherboard", url: "/fi/Product/List/000-00H" },
-  memory: { label: "Memory", url: "/fi/Product/List/000-00N" },
-  storage: { label: "Storage", url: "/fi/Product/List/000-00K" },
-  case: { label: "Case", url: "/fi/Product/List/000-00J" },
-  psu: { label: "Power Supply", url: "/fi/Product/List/000-00U" }
+  cpu: { label: "CPU", group: "000-00R", url: "/fi/Product/List/000-00R" },
+  gpu: { label: "Graphics Card", group: "000-00P", url: "/fi/Product/List/000-00P" },
+  motherboard: { label: "Motherboard", group: "000-00H", url: "/fi/Product/List/000-00H" },
+  memory: { label: "Memory", group: "000-00N", url: "/fi/Product/List/000-00N" },
+  storage: { label: "Storage", group: "000-00K", url: "/fi/Product/List/000-00K" },
+  case: { label: "Case", group: "000-00J", url: "/fi/Product/List/000-00J" },
+  psu: { label: "Power Supply", group: "000-00U", url: "/fi/Product/List/000-00U" }
 };
 
 const cache = new Map();
 const cacheMs = 1000 * 60 * 12;
+const pageSize = 100;
+const maxPagesPerCategory = 30;
 
 const fallbackProducts = {
   cpu: [
@@ -59,7 +61,7 @@ const fallbackProducts = {
 };
 
 function product(category, name, sku, price, availability, description) {
-  return {
+  const item = {
     id: `${category}-${sku}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
     category,
     name,
@@ -69,6 +71,8 @@ function product(category, name, sku, price, availability, description) {
     description,
     sourceUrl: `${JIMMS_BASE}${categories[category]?.url || "/fi/Product/Komponentit"}`
   };
+  item.specs = deriveSpecs(item);
+  return item;
 }
 
 function contentType(filePath) {
@@ -104,14 +108,19 @@ function sendFile(res, filePath) {
 }
 
 function decodeHtml(value) {
-  return value
+  return String(value)
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, "\"")
     .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&euro;/g, "€")
+    .replace(/&#196;/g, "Ä")
+    .replace(/&#214;/g, "Ö")
+    .replace(/&#228;/g, "ä")
+    .replace(/&#246;/g, "ö");
 }
 
 function stripHtml(html) {
@@ -127,92 +136,231 @@ function stripHtml(html) {
     .filter(Boolean);
 }
 
-function parseJimmsProducts(html, category) {
-  const cardBlocks = html.split(/\sdata-productguid=/i).slice(1);
-  const cardProducts = cardBlocks.map((block) => {
-    const nameMatch = block.match(/<h5 class="product-box-name">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
-    const skuMatch = block.match(/<div class="product-box-sku">([\s\S]*?)<\/div>/i);
-    const descriptionMatch = block.match(/<div class="product-list-rows--visible product-box-short-description">([\s\S]*?)<\/div>/i);
-    const priceMatch = block.match(/<span class="price__amount">([\s\S]*?)<\/span>/i);
-    const hrefMatch = block.match(/<a class="[^"]*js-gtm-product-link[^"]*" href="([^"]+)"/i);
-    const imageMatch = block.match(/data-src="([^"]+)"/i);
+function formatEuro(value) {
+  return new Intl.NumberFormat("fi-FI", {
+    style: "currency",
+    currency: "EUR"
+  }).format(Number(value) || 0).replace(/\u00a0/g, " ");
+}
 
-    if (!nameMatch || !priceMatch) return null;
+function normalizeSocket(value) {
+  if (!value) return null;
+  return value.toUpperCase().replace(/\s+/g, "");
+}
 
-    const name = stripHtml(nameMatch[1]).join(" ");
-    const sku = skuMatch ? stripHtml(skuMatch[1]).join(" ") : "";
-    const description = descriptionMatch ? stripHtml(descriptionMatch[1]).join(" ") : categories[category].label;
-    const href = hrefMatch ? hrefMatch[1] : categories[category].url;
-    const image = imageMatch ? imageMatch[1].replace(/^\/\//, "https://") : "";
+function firstMatch(text, regex) {
+  const match = text.match(regex);
+  return match ? match[1] || match[0] : null;
+}
 
+function detectSocket(text) {
+  return normalizeSocket(firstMatch(text, /\b(AM[45]|LGA\s?\d{4,5}|STR5|STRX4|TR4|SP3)\b/i));
+}
+
+function detectMemoryType(text) {
+  const match = text.match(/\bDDR[3-6]\b/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
+function detectMotherboardFormFactor(text) {
+  if (/\b(E-ATX|EATX)\b/i.test(text)) return "E-ATX";
+  if (/\b(Micro-ATX|mATX)\b/i.test(text)) return "mATX";
+  if (/\b(Mini-ITX|ITX)\b/i.test(text)) return "Mini-ITX";
+  if (/\bATX\b/i.test(text)) return "ATX";
+  return null;
+}
+
+function detectCaseFormFactors(text) {
+  if (/\b(Mini-ITX|Mini ITX|ITX)\b/i.test(text)) return ["Mini-ITX"];
+  if (/\b(mATX|Micro-ATX|Micro ATX)\b/i.test(text)) return ["mATX", "Mini-ITX"];
+  if (/\b(E-ATX|EATX|Full-torni|Full tower)\b/i.test(text)) return ["E-ATX", "ATX", "mATX", "Mini-ITX"];
+  if (/\b(ATX|Midi|Miditorn|Mid tower)\b/i.test(text)) return ["ATX", "mATX", "Mini-ITX"];
+  return [];
+}
+
+function detectPsuWattage(text) {
+  const match = text.match(/\b(\d{3,4})\s*W\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function estimateCpuWatts(text) {
+  if (/threadripper|xeon/i.test(text)) return 280;
+  if (/ryzen 9|core i9|ultra 9/i.test(text)) return 170;
+  if (/ryzen 7|core i7|ultra 7/i.test(text)) return 125;
+  if (/ryzen 5|core i5|ultra 5/i.test(text)) return 95;
+  if (/ryzen 3|core i3/i.test(text)) return 65;
+  return 95;
+}
+
+function estimateGpuWatts(text) {
+  const table = [
+    [/RTX\s*5090|RX\s*7900\s*XTX/i, 575],
+    [/RTX\s*5080|RTX\s*4090/i, 430],
+    [/RTX\s*5070\s*TI|RTX\s*4080|RX\s*9070\s*XT|RX\s*7900\s*XT/i, 330],
+    [/RTX\s*5070|RTX\s*4070\s*TI|RX\s*9070|RX\s*7800\s*XT/i, 260],
+    [/RTX\s*5060\s*TI|RTX\s*4070|RX\s*7700\s*XT|RX\s*9060\s*XT/i, 210],
+    [/RTX\s*5060|RTX\s*4060|RX\s*7600|INTEL\s*ARC/i, 160],
+    [/GTX|GEFORCE|RADEON/i, 150]
+  ];
+  const match = table.find(([regex]) => regex.test(text));
+  return match ? match[1] : 0;
+}
+
+function deriveSpecs(item) {
+  const text = `${item.name || ""} ${item.description || ""} ${item.productGroupName || ""} ${item.productGroupFullName || ""}`;
+  const specs = {};
+
+  if (item.category === "cpu") {
+    specs.socket = detectSocket(text);
+    specs.estimatedWatts = estimateCpuWatts(text);
+  }
+
+  if (item.category === "gpu") {
+    specs.memoryType = /GDDR\d/i.test(text) ? firstMatch(text, /\b(GDDR\d)\b/i).toUpperCase() : null;
+    specs.estimatedWatts = estimateGpuWatts(text);
+  }
+
+  if (item.category === "motherboard") {
+    specs.socket = detectSocket(text);
+    specs.memoryType = detectMemoryType(text);
+    specs.formFactor = detectMotherboardFormFactor(text);
+  }
+
+  if (item.category === "memory") {
+    specs.memoryType = detectMemoryType(text);
+    specs.capacityGb = Number(firstMatch(text, /\b(\d{1,4})GB\b/i)) || null;
+  }
+
+  if (item.category === "case") {
+    specs.supportedFormFactors = detectCaseFormFactors(text);
+  }
+
+  if (item.category === "psu") {
+    specs.wattage = detectPsuWattage(text);
+  }
+
+  return specs;
+}
+
+function mapApiProduct(apiProduct, category) {
+  const name = [apiProduct.VendorName, apiProduct.Name].filter(Boolean).join(" ");
+  const item = {
+    id: `${category}-${apiProduct.Code || apiProduct.ProductGuid || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
+    category,
+    name,
+    sku: apiProduct.Code || "",
+    price: formatEuro(apiProduct.PriceTax ?? apiProduct.Price),
+    availability: apiProduct.DeliveryInfoText || apiProduct.DeliveryDurationText || "Check live stock on Jimms.fi",
+    description: apiProduct.LongName || apiProduct.ProductGroupName || categories[category].label,
+    image: apiProduct.ImageID && apiProduct.ImageBaseSrc
+      ? `${apiProduct.ImageBaseSrc.replace(/^\/\//, "https://")}${apiProduct.ImageID}-ig400gg.jpg`
+      : "",
+    sourceUrl: apiProduct.Uri ? `${JIMMS_BASE}/fi/${apiProduct.Uri}` : `${JIMMS_BASE}${categories[category].url}`,
+    productGroupName: apiProduct.ProductGroupName || "",
+    productGroupFullName: (apiProduct.ProductGroupFullName || "").replace(/\|\|/g, " / ")
+  };
+  item.specs = deriveSpecs(item);
+  return item;
+}
+
+async function fetchJsonPage(categoryKey, page) {
+  const category = categories[categoryKey];
+  const body = {
+    Page: page,
+    Items: pageSize,
+    OrderBy: "6",
+    OrderDir: "0",
+    ProductGroup: category.group,
+    FilterQuery: "",
+    MinPrice: 0,
+    MaxPrice: 0,
+    MultivalueFilters: [
+      { Name: "brand", Value: [], IsChanged: false },
+      { Name: "category", Value: [], IsChanged: false }
+    ]
+  };
+
+  const response = await fetch(`${JIMMS_BASE}/api/product/searchv2?${Date.now()}-${page}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ApiKey: "public",
+      "User-Agent": "JimmsPartPicker/1.0 (+local development)",
+      "Accept-Language": "fi-FI,fi;q=0.9,en;q=0.8"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jimms.fi returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function fetchCategoryFromJimms(categoryKey) {
+  const firstPage = await fetchJsonPage(categoryKey, 1);
+  const firstProducts = firstPage.Products || [];
+  const count = firstPage.FilteredCount || firstPage.Count || firstProducts.length;
+  const totalPages = Math.min(Math.ceil(count / pageSize), maxPagesPerCategory);
+  const products = [...firstProducts];
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const data = await fetchJsonPage(categoryKey, page);
+    products.push(...(data.Products || []));
+  }
+
+  return {
+    products: uniqueProducts(products.map((item) => mapApiProduct(item, categoryKey))),
+    count,
+    pagesFetched: totalPages
+  };
+}
+
+function filterProducts(products, query) {
+  const term = query.trim().toLowerCase();
+  if (!term) return products;
+  return products.filter((item) =>
+    `${item.name} ${item.sku} ${item.description} ${item.productGroupName || ""}`.toLowerCase().includes(term)
+  );
+}
+
+async function fetchCategory(categoryKey, query) {
+  const category = categories[categoryKey];
+  if (!category) {
+    return { source: "fallback", total: 0, products: [] };
+  }
+
+  const cached = cache.get(categoryKey);
+  if (cached && Date.now() - cached.createdAt < cacheMs) {
     return {
-      id: `${category}-${sku || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
-      category,
-      name,
-      sku,
-      price: stripHtml(priceMatch[1]).join(" "),
-      availability: "Check live stock on Jimms.fi",
-      description,
-      image,
-      sourceUrl: href.startsWith("http") ? href : `${JIMMS_BASE}${href}`
+      source: cached.source,
+      total: cached.products.length,
+      products: filterProducts(cached.products, query)
     };
-  }).filter(Boolean);
-
-  if (cardProducts.length > 0) {
-    return uniqueProducts(cardProducts);
   }
 
-  const lines = stripHtml(html);
-  const products = [];
-  const pricePattern = /^\d[\d\s.,]*,\d{2}\s*€(?:\s+\d[\d\s.,]*,\d{2}\s*€)?$/;
-  const ignored = new Set(["sort", "filter_list Suodata", "apps grid_view table_rows", "Haetaan tuotteita...", "add_shopping_cart Lisää koriin", "Näytä tuote"]);
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const name = lines[i];
-    if (
-      ignored.has(name) ||
-      name.length < 12 ||
-      pricePattern.test(name) ||
-      /^fiber_manual_record/.test(name) ||
-      /^star\b/.test(name)
-    ) {
-      continue;
+  try {
+    const result = await fetchCategoryFromJimms(categoryKey);
+    if (result.products.length < 1) {
+      throw new Error("No products returned from Jimms.fi");
     }
 
-    let priceIndex = -1;
-    for (let j = i + 1; j < Math.min(lines.length, i + 12); j += 1) {
-      if (pricePattern.test(lines[j])) {
-        priceIndex = j;
-        break;
-      }
-    }
-
-    if (priceIndex === -1) continue;
-
-    const sku = lines[i + 1] && !ignored.has(lines[i + 1]) ? lines[i + 1] : "";
-    const details = lines
-      .slice(i + 2, priceIndex)
-      .filter((line) => !/^star\b/.test(line) && !/^local_offer/.test(line))
-      .slice(0, 2)
-      .join(" | ");
-    const availability =
-      lines.slice(priceIndex + 1, priceIndex + 5).find((line) => /^fiber_manual_record/.test(line)) || "Saatavuus Jimms.fi";
-
-    products.push({
-      id: `${category}-${sku || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
-      category,
-      name,
-      sku,
-      price: lines[priceIndex].split("€")[0].trim() + " €",
-      availability: availability.replace("fiber_manual_record", "").trim(),
-      description: details || categories[category].label,
-      sourceUrl: `${JIMMS_BASE}${categories[category].url}`
-    });
-
-    i = priceIndex;
+    const source = `jimms.fi live, ${result.products.length} products across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}`;
+    cache.set(categoryKey, { createdAt: Date.now(), products: result.products, source });
+    return {
+      source,
+      total: result.products.length,
+      products: filterProducts(result.products, query)
+    };
+  } catch (error) {
+    const products = fallbackProducts[categoryKey] || [];
+    return {
+      source: `cached sample data (${error.message})`,
+      total: products.length,
+      products: filterProducts(products, query)
+    };
   }
-
-  return uniqueProducts(products);
 }
 
 function uniqueProducts(products) {
@@ -222,55 +370,6 @@ function uniqueProducts(products) {
     seen.add(item.id);
     return true;
   });
-}
-
-function filterProducts(products, query) {
-  const term = query.trim().toLowerCase();
-  if (!term) return products;
-  return products.filter((item) =>
-    `${item.name} ${item.sku} ${item.description}`.toLowerCase().includes(term)
-  );
-}
-
-async function fetchCategory(categoryKey, query) {
-  const category = categories[categoryKey];
-  if (!category) {
-    return { source: "fallback", products: [] };
-  }
-
-  const cacheKey = categoryKey;
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < cacheMs) {
-    return { source: cached.source, products: filterProducts(cached.products, query) };
-  }
-
-  try {
-    const response = await fetch(`${JIMMS_BASE}${category.url}`, {
-      headers: {
-        "User-Agent": "JimmsPartPicker/1.0 (+local development)",
-        "Accept-Language": "fi-FI,fi;q=0.9,en;q=0.8"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Jimms.fi returned ${response.status}`);
-    }
-
-    const html = await response.text();
-    const parsed = parseJimmsProducts(html, categoryKey);
-    if (parsed.length < 1) {
-      throw new Error("No products parsed from Jimms.fi");
-    }
-
-    cache.set(cacheKey, { createdAt: Date.now(), products: parsed, source: "jimms.fi live" });
-    return { source: "jimms.fi live", products: filterProducts(parsed, query) };
-  } catch (error) {
-    const products = fallbackProducts[categoryKey] || [];
-    return {
-      source: `cached sample data (${error.message})`,
-      products: filterProducts(products, query)
-    };
-  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -289,6 +388,7 @@ const server = http.createServer(async (req, res) => {
       category,
       categoryLabel: categories[category]?.label || category,
       source: result.source,
+      total: result.total,
       products: result.products
     });
     return;

@@ -110,7 +110,8 @@ input {
 .builder-head,
 .catalog-head,
 .toolbar,
-.summary {
+.summary,
+.compatibility {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -262,6 +263,76 @@ h2 {
   font-size: 1.55rem;
 }
 
+.compatibility {
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.compatibility-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.compatibility-head span {
+  min-width: 58px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #e8f5f3;
+  color: var(--accent-dark);
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.compatibility[data-status="warn"] .compatibility-head span {
+  background: #fff4de;
+  color: #8a4b05;
+}
+
+.compatibility[data-status="error"] .compatibility-head span {
+  background: #fee7df;
+  color: var(--warn);
+}
+
+.compatibility ul {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compatibility li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.compatibility li::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.compatibility .compat-ok::before {
+  background: var(--accent);
+}
+
+.compatibility .compat-warn::before {
+  background: #c27803;
+}
+
+.compatibility .compat-error::before {
+  background: var(--warn);
+}
+
 .toolbar {
   display: grid;
   gap: 12px;
@@ -405,6 +476,22 @@ h2 {
 
 .stock {
   color: var(--accent-dark);
+  font-weight: 750;
+}
+
+.spec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.spec-tags span {
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 750;
 }
 
