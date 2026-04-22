@@ -177,9 +177,9 @@ h2 {
 
 .part-row {
   display: grid;
-  grid-template-columns: minmax(115px, 0.55fr) minmax(0, 1fr) minmax(96px, auto) 36px;
-  align-items: center;
-  min-height: 74px;
+  grid-template-columns: minmax(115px, 0.44fr) minmax(0, 1fr) minmax(96px, auto) 36px;
+  align-items: start;
+  min-height: 82px;
   gap: 12px;
   padding: 12px;
   background: var(--panel);
@@ -195,6 +195,7 @@ h2 {
   color: var(--ink);
   cursor: pointer;
   font-weight: 750;
+  align-self: center;
 }
 
 .part-select.active {
@@ -206,31 +207,47 @@ h2 {
 .selected-part {
   min-width: 0;
   color: var(--muted);
+  align-self: center;
 }
 
 .selected-part strong,
-.selected-part span {
+.selected-part span,
+.selected-details {
   display: block;
 }
 
 .selected-part strong {
   color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .selected-part span {
   margin-top: 3px;
   font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.selected-details {
+  margin-top: 5px;
+  color: #405064;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .part-price {
+  align-self: center;
   justify-self: end;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .remove-button {
+  align-self: center;
   width: 36px;
   height: 36px;
   border: 1px solid var(--line);

@@ -138,7 +138,21 @@ function renderPartRows() {
     });
 
     if (item) {
-      selected.innerHTML = `<strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.sku || item.description || "Jimms.fi")}</span>`;
+      selected.innerHTML = "";
+      const name = document.createElement("strong");
+      name.textContent = item.displayName || cleanProductName(item);
+      selected.append(name);
+
+      const details = document.createElement("div");
+      details.className = "selected-details";
+      const values = productDetailValues(item);
+      const detailText = values.length > 0 ? values.join(" · ") : item.description || item.sku || "Jimms.fi";
+      details.textContent = detailText;
+      selected.append(details);
+
+      const meta = document.createElement("span");
+      meta.textContent = item.sku || item.description || "Jimms.fi";
+      selected.append(meta);
       price.textContent = item.price;
       remove.hidden = false;
       remove.addEventListener("click", () => {
