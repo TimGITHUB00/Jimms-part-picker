@@ -1,5 +1,7 @@
 const categories = [
   ["cpu", "CPU"],
+  ["cooler", "CPU Cooler"],
+  ["aio", "AIO Cooler"],
   ["gpu", "GPU"],
   ["motherboard", "Motherboard"],
   ["memory", "Memory"],
@@ -10,6 +12,8 @@ const categories = [
 
 const jimmsUrls = {
   cpu: "https://www.jimms.fi/fi/Product/List/000-00R",
+  cooler: "https://www.jimms.fi/fi/Product/List/000-059",
+  aio: "https://www.jimms.fi/fi/Product/List/000-1KG",
   gpu: "https://www.jimms.fi/fi/Product/List/000-00P",
   motherboard: "https://www.jimms.fi/fi/Product/List/000-00H",
   memory: "https://www.jimms.fi/fi/Product/List/000-00N",
@@ -21,7 +25,8 @@ const jimmsUrls = {
 const state = {
   activeCategory: "cpu",
   selected: Object.fromEntries(categories.map(([key]) => [key, null])),
-  products: []
+  products: [],
+  displayedProducts: []
 };
 
 const partList = document.querySelector("#partList");
@@ -30,6 +35,12 @@ const productsEl = document.querySelector("#products");
 const productTemplate = document.querySelector("#productTemplate");
 const partRowTemplate = document.querySelector("#partRowTemplate");
 const searchInput = document.querySelector("#searchInput");
+const sortSelect = document.querySelector("#sortSelect");
+const brandFilter = document.querySelector("#brandFilter");
+const specFilter = document.querySelector("#specFilter");
+const minPriceFilter = document.querySelector("#minPriceFilter");
+const maxPriceFilter = document.querySelector("#maxPriceFilter");
+const stockFilter = document.querySelector("#stockFilter");
 const totalPrice = document.querySelector("#totalPrice");
 const catalogTitle = document.querySelector("#catalogTitle");
 const catalogMeta = document.querySelector("#catalogMeta");
@@ -60,6 +71,15 @@ function categoryLabel(key) {
   return categories.find(([id]) => id === key)?.[1] || key;
 }
 
+function resetFilters() {
+  sortSelect.value = "featured";
+  brandFilter.value = "";
+  specFilter.value = "";
+  minPriceFilter.value = "";
+  maxPriceFilter.value = "";
+  stockFilter.checked = false;
+}
+
 function renderTabs() {
   categoryTabs.innerHTML = "";
   categories.forEach(([key, label]) => {
@@ -72,6 +92,7 @@ function renderTabs() {
     button.addEventListener("click", () => {
       state.activeCategory = key;
       searchInput.value = "";
+      resetFilters();
       renderTabs();
       renderPartRows();
       loadProducts();
@@ -123,12 +144,12 @@ function renderPartRows() {
 function renderProducts() {
   productsEl.innerHTML = "";
 
-  if (state.products.length === 0) {
+  if (state.displayedProducts.length === 0) {
     productsEl.innerHTML = `<div class="empty">No Jimms.fi products matched that search.</div>`;
     return;
   }
 
-  state.products.forEach((product) => {
+  state.displayedProducts.forEach((product) => {
     const card = productTemplate.content.firstElementChild.cloneNode(true);
     const visual = card.querySelector(".product-visual");
     card.querySelector("h3").textContent = product.name;
@@ -165,16 +186,117 @@ async function loadProducts() {
     if (!response.ok) throw new Error(`Request failed with ${response.status}`);
     const data = await response.json();
     state.products = data.products || [];
+    populateFilterOptions();
+    applyProductFilters();
     const total = data.total || state.products.length;
-    catalogMeta.textContent = `${state.products.length} shown from ${total} ${label.toLowerCase()} products`;
+    updateCatalogMeta(total, label);
     sourcePill.textContent = data.source || "Jimms.fi";
     renderProducts();
   } catch (error) {
     state.products = [];
+    state.displayedProducts = [];
     sourcePill.textContent = "Jimms.fi source unavailable";
     catalogMeta.textContent = error.message;
     renderProducts();
   }
+}
+
+function updateCatalogMeta(total, label) {
+  catalogMeta.textContent = `${state.displayedProducts.length} shown from ${total} ${label.toLowerCase()} products`;
+}
+
+function getSpecValues(product) {
+  const specs = product.specs || {};
+  const values = [];
+  if (specs.socket) values.push(specs.socket);
+  if (specs.memoryType) values.push(specs.memoryType);
+  if (specs.formFactor) values.push(specs.formFactor);
+  if (specs.coolerType) values.push(specs.coolerType);
+  if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm`);
+  if (specs.wattage) values.push(`${specs.wattage}W`);
+  if (Array.isArray(specs.supportedFormFactors)) values.push(...specs.supportedFormFactors);
+  return [...new Set(values.filter(Boolean))];
+}
+
+function populateFilterOptions() {
+  const currentBrand = brandFilter.value;
+  const currentSpec = specFilter.value;
+  const brands = [...new Set(state.products.map((item) => item.brand || item.name.split(/\s+/)[0]).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const specs = [...new Set(state.products.flatMap(getSpecValues))]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+  brandFilter.innerHTML = `<option value="">All brands</option>`;
+  brands.forEach((brand) => {
+    const option = document.createElement("option");
+    option.value = brand;
+    option.textContent = brand;
+    brandFilter.append(option);
+  });
+
+  specFilter.innerHTML = `<option value="">All specs</option>`;
+  specs.forEach((spec) => {
+    const option = document.createElement("option");
+    option.value = spec;
+    option.textContent = spec;
+    specFilter.append(option);
+  });
+
+  if (brands.includes(currentBrand)) brandFilter.value = currentBrand;
+  if (specs.includes(currentSpec)) specFilter.value = currentSpec;
+}
+
+function applyProductFilters() {
+  const brand = brandFilter.value;
+  const spec = specFilter.value;
+  const min = Number.parseFloat(minPriceFilter.value);
+  const max = Number.parseFloat(maxPriceFilter.value);
+  const inStockOnly = stockFilter.checked;
+
+  let products = [...state.products];
+
+  if (brand) {
+    products = products.filter((item) => (item.brand || item.name.split(/\s+/)[0]) === brand);
+  }
+
+  if (spec) {
+    products = products.filter((item) => getSpecValues(item).includes(spec));
+  }
+
+  if (Number.isFinite(min)) {
+    products = products.filter((item) => parseEuro(item.price) >= min);
+  }
+
+  if (Number.isFinite(max)) {
+    products = products.filter((item) => parseEuro(item.price) <= max);
+  }
+
+  if (inStockOnly) {
+    products = products.filter((item) => /varastossa/i.test(item.availability || ""));
+  }
+
+  products.sort((a, b) => {
+    switch (sortSelect.value) {
+      case "price-asc":
+        return parseEuro(a.price) - parseEuro(b.price);
+      case "price-desc":
+        return parseEuro(b.price) - parseEuro(a.price);
+      case "name-asc":
+        return a.name.localeCompare(b.name);
+      case "name-desc":
+        return b.name.localeCompare(a.name);
+      default:
+        return 0;
+    }
+  });
+
+  state.displayedProducts = products;
+}
+
+function refreshFilteredProducts() {
+  applyProductFilters();
+  updateCatalogMeta(state.products.length, categoryLabel(state.activeCategory));
+  renderProducts();
 }
 
 function updateTotal() {
@@ -193,6 +315,8 @@ function renderSpecTags(card, product) {
   if (specs.formFactor) tags.push(specs.formFactor);
   if (specs.wattage) tags.push(`${specs.wattage}W`);
   if (specs.estimatedWatts) tags.push(`~${specs.estimatedWatts}W`);
+  if (specs.coolerType) tags.push(specs.coolerType);
+  if (specs.radiatorSize) tags.push(`${specs.radiatorSize}mm`);
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
     tags.push(specs.supportedFormFactors.join("/"));
   }
@@ -259,6 +383,25 @@ function updateCompatibility() {
     }
   }
 
+  if (parts.cpu && (parts.cooler || parts.aio)) {
+    const cooler = parts.aio || parts.cooler;
+    const coolerType = cooler.specs?.coolerType || "cooler";
+    const cpuWatts = parts.cpu.specs?.estimatedWatts || 0;
+    const radiator = cooler.specs?.radiatorSize || 0;
+
+    if (coolerType === "AIO" && radiator > 0) {
+      if (cpuWatts >= 170 && radiator < 280) {
+        addCheck(checks, "warn", `A high-power CPU is paired with a ${radiator}mm AIO. Consider 280mm or larger.`);
+      } else {
+        addCheck(checks, "ok", `${radiator}mm AIO is a reasonable cooler class for the selected CPU.`);
+      }
+    } else if (cpuWatts >= 170) {
+      addCheck(checks, "warn", "High-power CPU selected. Confirm the air cooler's socket support and heat rating on Jimms.fi.");
+    } else {
+      addCheck(checks, "info", "CPU cooler socket support is not always listed in category data. Confirm socket support on the Jimms product page.");
+    }
+  }
+
   if (parts.case && parts.motherboard) {
     const boardForm = parts.motherboard.specs?.formFactor;
     const supported = parts.case.specs?.supportedFormFactors || [];
@@ -271,6 +414,10 @@ function updateCompatibility() {
     } else {
       addCheck(checks, "warn", "Case or motherboard form factor could not be confidently read from the listings.");
     }
+  }
+
+  if (parts.case && parts.aio?.specs?.radiatorSize) {
+    addCheck(checks, "info", `Confirm the case has clearance for a ${parts.aio.specs.radiatorSize}mm radiator.`);
   }
 
   if (parts.psu) {
@@ -337,6 +484,11 @@ let searchTimer;
 searchInput.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadProducts, 280);
+});
+
+[sortSelect, brandFilter, specFilter, minPriceFilter, maxPriceFilter, stockFilter].forEach((control) => {
+  control.addEventListener("input", refreshFilteredProducts);
+  control.addEventListener("change", refreshFilteredProducts);
 });
 
 clearBuild.addEventListener("click", () => {

@@ -51,6 +51,42 @@
             <span>Search</span>
             <input id="searchInput" type="search" placeholder="Ryzen, RTX, DDR5..." autocomplete="off">
           </label>
+          <div class="filters" aria-label="Product filters">
+            <label>
+              <span>Sort</span>
+              <select id="sortSelect">
+                <option value="featured">Featured</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+                <option value="name-asc">Name: A to Z</option>
+                <option value="name-desc">Name: Z to A</option>
+              </select>
+            </label>
+            <label>
+              <span>Brand</span>
+              <select id="brandFilter">
+                <option value="">All brands</option>
+              </select>
+            </label>
+            <label>
+              <span>Spec</span>
+              <select id="specFilter">
+                <option value="">All specs</option>
+              </select>
+            </label>
+            <label>
+              <span>Min €</span>
+              <input id="minPriceFilter" type="number" min="0" step="10" inputmode="decimal">
+            </label>
+            <label>
+              <span>Max €</span>
+              <input id="maxPriceFilter" type="number" min="0" step="10" inputmode="decimal">
+            </label>
+            <label class="check-filter">
+              <input id="stockFilter" type="checkbox">
+              <span>In stock</span>
+            </label>
+          </div>
         </div>
 
         <div class="catalog-head">

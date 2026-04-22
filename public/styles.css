@@ -25,7 +25,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -370,7 +371,9 @@ h2 {
   font-weight: 700;
 }
 
-.search input {
+.search input,
+.filters input,
+.filters select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);
@@ -378,6 +381,49 @@ h2 {
   padding: 0 13px;
   background: white;
   color: var(--ink);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(145px, 1fr) minmax(140px, 1fr) minmax(130px, 1fr) minmax(86px, 0.55fr) minmax(86px, 0.55fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.filters select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%) right 15px top 19px / 6px 6px no-repeat,
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%) right 10px top 19px / 6px 6px no-repeat,
+    white;
+  padding: 0 32px 0 12px;
+}
+
+.check-filter {
+  display: inline-flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink) !important;
+}
+
+.check-filter input {
+  width: 17px;
+  min-height: 17px;
+  accent-color: var(--accent);
 }
 
 .catalog-head {
@@ -539,6 +585,10 @@ h2 {
   .products {
     grid-template-columns: 1fr;
   }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -551,6 +601,10 @@ h2 {
 
   .source-pill {
     max-width: none;
+  }
+
+  .filters {
+    grid-template-columns: 1fr;
   }
 
   .part-row {

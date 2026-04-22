@@ -9,6 +9,8 @@ const JIMMS_BASE = "https://www.jimms.fi";
 
 const categories = {
   cpu: { label: "CPU", group: "000-00R", url: "/fi/Product/List/000-00R" },
+  cooler: { label: "CPU Cooler", group: "000-059", url: "/fi/Product/List/000-059" },
+  aio: { label: "AIO Cooler", group: "000-1KG", url: "/fi/Product/List/000-1KG" },
   gpu: { label: "Graphics Card", group: "000-00P", url: "/fi/Product/List/000-00P" },
   motherboard: { label: "Motherboard", group: "000-00H", url: "/fi/Product/List/000-00H" },
   memory: { label: "Memory", group: "000-00N", url: "/fi/Product/List/000-00N" },
@@ -27,6 +29,16 @@ const fallbackProducts = {
     product("cpu", "AMD Ryzen 7 9800X3D, AM5, 4.7 GHz, 8-Core, WOF", "100-100001084WOF", "509,90 €", "Varastossa", "AMD AM5, 8-Core, gaming CPU"),
     product("cpu", "AMD Ryzen 5 9600X, AM5, 3.9 GHz, 6-Core, WOF", "100-100001405WOF", "224,90 €", "Varastossa", "AM5, 6-Core"),
     product("cpu", "Intel Core i5-14600K, LGA1700, 3.50 GHz, 24MB, Boxed", "BX8071514600K", "251,90 €", "Varastossa", "LGA1700, unlocked")
+  ],
+  cooler: [
+    product("cooler", "Thermalright Peerless Assassin 120 SE -prosessorijäähdytin", "PA120-SE-1700", "41,90 €", "Varastossa", "Air cooler, 120mm"),
+    product("cooler", "Noctua NH-D15 chromax.black -prosessorijäähdytin", "NH-D15-CHROMAX.BLACK", "114,90 €", "Varastossa", "Dual tower air cooler"),
+    product("cooler", "Thermalright Phantom Spirit 120 EVO -prosessorijäähdytin", "PHANTOM-SPIRIT-120-EVO", "59,90 €", "Varastossa", "Air cooler, 2 x 120mm")
+  ],
+  aio: [
+    product("aio", "ARCTIC Liquid Freezer III Pro 360, 360mm AIO-nestejäähdytysratkaisu prosessorille, musta", "ACFRE00180A", "96,90 €", "Varastossa", "AIO liquid cooler, 360mm"),
+    product("aio", "Asus ROG RYUJIN 240, AIO-vesijäähdytysjärjestelmä prosessorille", "90RC0030-M0UAY0", "79,90 €", "Varastossa", "AIO liquid cooler, 240mm"),
+    product("aio", "ARCTIC Liquid Freezer III Pro 420, 420mm AIO-nestejäähdytysratkaisu prosessorille, musta", "ACFRE00181A", "120,90 €", "Varastossa", "AIO liquid cooler, 420mm")
   ],
   gpu: [
     product("gpu", "Asus Radeon RX 9060 XT Dual -näytönohjain, 16GB GDDR6", "DUAL-RX9060XT-16G", "459,90 €", "Varastossa", "PCIe 5.0, HDMI/2xDP"),
@@ -65,6 +77,7 @@ function product(category, name, sku, price, availability, description) {
     id: `${category}-${sku}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
     category,
     name,
+    brand: firstMatch(name, /^([A-Za-z0-9]+)/) || "",
     sku,
     price,
     availability,
@@ -183,6 +196,16 @@ function detectPsuWattage(text) {
   return match ? Number(match[1]) : null;
 }
 
+function detectRadiatorSize(text) {
+  const match = text.match(/\b(120|140|240|280|360|420)\s*mm\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function detectCoolerType(text, category) {
+  if (category === "aio" || /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text)) return "AIO";
+  return "Air";
+}
+
 function estimateCpuWatts(text) {
   if (/threadripper|xeon/i.test(text)) return 280;
   if (/ryzen 9|core i9|ultra 9/i.test(text)) return 170;
@@ -213,6 +236,11 @@ function deriveSpecs(item) {
   if (item.category === "cpu") {
     specs.socket = detectSocket(text);
     specs.estimatedWatts = estimateCpuWatts(text);
+  }
+
+  if (item.category === "cooler" || item.category === "aio") {
+    specs.coolerType = detectCoolerType(text, item.category);
+    specs.radiatorSize = detectRadiatorSize(text);
   }
 
   if (item.category === "gpu") {
@@ -248,6 +276,7 @@ function mapApiProduct(apiProduct, category) {
     id: `${category}-${apiProduct.Code || apiProduct.ProductGuid || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
     category,
     name,
+    brand: apiProduct.VendorName || "",
     sku: apiProduct.Code || "",
     price: formatEuro(apiProduct.PriceTax ?? apiProduct.Price),
     availability: apiProduct.DeliveryInfoText || apiProduct.DeliveryDurationText || "Check live stock on Jimms.fi",
