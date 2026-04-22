@@ -393,6 +393,52 @@ function cleanProductName(product) {
       .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
   }
 
+  if (product.category === "gpu") {
+    name = name
+      .replace(/\s+-\s*Pelikoneisiin.*$/gi, "")
+      .replace(/\s+-\s*näytönohjain\b/gi, "")
+      .replace(/\s+näytönohjain\b/gi, "")
+      .replace(/,\s*\d+\s*GB\s*GDDR\d\b/gi, "");
+  }
+
+  if (product.category === "motherboard") {
+    name = name
+      .replace(/,\s*(ATX|mATX|Micro-ATX|Mini-ITX|E-ATX)-?emolevy\b/gi, "")
+      .replace(/,\s*emolevy\b/gi, "");
+  }
+
+  if (product.category === "memory") {
+    name = name
+      .replace(/,\s*\d+\s*(?:GB|TB)\s*(?:\([^)]*\))?/gi, "")
+      .replace(/,\s*DDR[3-6]\s*\d+\s*MHz\b/gi, "")
+      .replace(/,\s*CL\d+\b/gi, "")
+      .replace(/,\s*\d+(?:[.,]\d+)?\s*V\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
+  if (product.category === "storage") {
+    name = name
+      .replace(/,\s*(?:PCIe\s*\d(?:\.\d)?\s*)?(?:NVMe\s*)?(?:M\.2\s*2280|M\.2|2\.5[”"]?|2,5[”"]?|3\.5[”"]?|3,5[”"]?)\s*(?:SSD|HDD)?-?levy\b/gi, "")
+      .replace(/\s+(?:SSD|HDD)?-?levy\b/gi, "")
+      .replace(/,\s*(?:NVMe|SATA|PCIe\s*\d(?:\.\d)?(?:\s*x\d+)?|M\.2\s*2280|M\.2|2\.5[”"]?|2,5[”"]?|3\.5[”"]?|3,5[”"]?)\b/gi, "")
+      .replace(/,\s*\d+\/\d+\s*MB\/s\b/gi, "");
+  }
+
+  if (product.category === "case") {
+    name = name
+      .replace(/,\s*(ikkunallinen\s*)?(miditornikotelo|mATX-kotelo|ATX-kotelo|Mini-ITX-kotelo|kotelo)\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
+  if (product.category === "psu") {
+    name = name
+      .replace(/^\s*\d{3,4}W\s+/i, "")
+      .replace(/,\s*ATX-virtalähde\b/gi, "")
+      .replace(/,\s*virtalähde\b/gi, "")
+      .replace(/,\s*80\s*Plus\s*(?:Bronze|Silver|Gold|Platinum|Titanium)\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
   return [brand, name.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim()].filter(Boolean).join(" ");
 }
 
@@ -410,6 +456,13 @@ function productDetailValues(product) {
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
   if (specs.color) values.push(specs.color);
+  if (specs.capacity) values.push(specs.capacity);
+  if (specs.speed) values.push(specs.speed);
+  if (specs.casLatency) values.push(specs.casLatency);
+  if (specs.voltage) values.push(specs.voltage);
+  if (specs.interface) values.push(specs.interface);
+  if (specs.efficiency) values.push(specs.efficiency);
+  if (specs.modularity) values.push(specs.modularity);
   if (specs.wattage) values.push(`${specs.wattage}W`);
   if (specs.estimatedWatts) values.push(`~${specs.estimatedWatts}W`);
 

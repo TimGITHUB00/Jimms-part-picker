@@ -217,6 +217,48 @@ function detectColorDescriptor(text) {
   return match ? match[1].trim() : null;
 }
 
+function detectMemorySpeed(text) {
+  const match = text.match(/\bDDR[3-6]\s*(\d{3,5})\s*MHz\b/i) || text.match(/\b(\d{3,5})\s*MHz\b/i);
+  return match ? `${match[1]}MHz` : null;
+}
+
+function detectCasLatency(text) {
+  const match = text.match(/\bCL\s?(\d+)\b/i);
+  return match ? `CL${match[1]}` : null;
+}
+
+function detectVoltage(text) {
+  const match = text.match(/\b\d+(?:[.,]\d+)?\s*V\b/i);
+  return match ? match[0].replace(",", ".").replace(/\s+/g, "") : null;
+}
+
+function detectStorageFormFactor(text) {
+  if (/\bM\.2\s*2280\b/i.test(text)) return "M.2 2280";
+  if (/\bM\.2\b/i.test(text)) return "M.2";
+  if (/\b2\.5[”"]?\b|\b2,5[”"]?\b/i.test(text)) return "2.5-inch";
+  if (/\b3\.5[”"]?\b|\b3,5[”"]?\b/i.test(text)) return "3.5-inch";
+  return null;
+}
+
+function detectStorageInterface(text) {
+  if (/\bNVMe\b/i.test(text)) return "NVMe";
+  if (/\bSATA\b/i.test(text)) return "SATA";
+  if (/\bPCIe\s*\d(?:\.\d)?(?:\s*x\d+)?\b/i.test(text)) return firstMatch(text, /\bPCIe\s*\d(?:\.\d)?(?:\s*x\d+)?\b/i).replace(/\s+/g, " ");
+  return null;
+}
+
+function detectPsuEfficiency(text) {
+  const match = text.match(/\b80\s*Plus\s*(Bronze|Silver|Gold|Platinum|Titanium)\b/i);
+  return match ? `80 Plus ${match[1]}` : null;
+}
+
+function detectPsuModularity(text) {
+  if (/täysmodulaarinen|fully modular/i.test(text)) return "Fully modular";
+  if (/puolimodulaarinen|semi[-\s]?modular/i.test(text)) return "Semi-modular";
+  if (/modulaarinen|modular/i.test(text)) return "Modular";
+  return null;
+}
+
 function detectRadiatorSize(text) {
   const match = text.match(/\b(120|140|240|280|360|420)\s*mm\b/i);
   return match ? Number(match[1]) : null;
@@ -270,6 +312,7 @@ function deriveSpecs(item) {
 
   if (item.category === "gpu") {
     specs.memoryType = /GDDR\d/i.test(text) ? firstMatch(text, /\b(GDDR\d)\b/i).toUpperCase() : null;
+    specs.capacity = firstMatch(text, /\b\d+\s*(?:GB|TB)\b/i)?.replace(/\s+/g, "") || null;
     specs.estimatedWatts = estimateGpuWatts(text);
   }
 
@@ -281,15 +324,28 @@ function deriveSpecs(item) {
 
   if (item.category === "memory") {
     specs.memoryType = detectMemoryType(text);
+    specs.speed = detectMemorySpeed(text);
+    specs.casLatency = detectCasLatency(text);
+    specs.voltage = detectVoltage(text);
+    specs.color = detectColorDescriptor(item.name || "");
     specs.capacityGb = Number(firstMatch(text, /\b(\d{1,4})GB\b/i)) || null;
+  }
+
+  if (item.category === "storage") {
+    specs.capacity = firstMatch(text, /\b\d+\s*(?:GB|TB)\b/i)?.replace(/\s+/g, "") || null;
+    specs.formFactor = detectStorageFormFactor(text);
+    specs.interface = detectStorageInterface(text);
   }
 
   if (item.category === "case") {
     specs.supportedFormFactors = detectCaseFormFactors(text);
+    specs.color = detectColorDescriptor(item.name || "");
   }
 
   if (item.category === "psu") {
     specs.wattage = detectPsuWattage(text);
+    specs.efficiency = detectPsuEfficiency(text);
+    specs.modularity = detectPsuModularity(text);
   }
 
   return specs;
@@ -333,18 +389,54 @@ function buildDisplayName(apiProduct, category) {
 
   if (category === "memory") {
     baseName = baseName
+      .replace(/,\s*\d+\s*(?:GB|TB)\s*(?:\([^)]*\))?/gi, "")
       .replace(/,\s*DDR[3-6]\s*\d+\s*MHz\b/gi, "")
-      .replace(/,\s*CL\d+\b/gi, "");
+      .replace(/,\s*CL\d+\b/gi, "")
+      .replace(/,\s*\d+(?:[.,]\d+)?\s*V\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
   }
 
   if (category === "motherboard") {
-    baseName = baseName.replace(/,\s*(ATX|mATX|Micro-ATX|Mini-ITX|E-ATX)-?emolevy\b/gi, "");
+    baseName = baseName
+      .replace(/,\s*(ATX|mATX|Micro-ATX|Mini-ITX|E-ATX)-?emolevy\b/gi, "")
+      .replace(/,\s*emolevy\b/gi, "");
   }
 
   if (category === "cooler" || category === "aio") {
     baseName = baseName
       .replace(/\s+-\s*prosessorijäähdytin\b/gi, "")
       .replace(/\s+prosessorijäähdytin\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
+  if (category === "gpu") {
+    baseName = baseName
+      .replace(/\s+-\s*Pelikoneisiin.*$/gi, "")
+      .replace(/\s+-\s*näytönohjain\b/gi, "")
+      .replace(/\s+näytönohjain\b/gi, "")
+      .replace(/,\s*\d+\s*GB\s*GDDR\d\b/gi, "");
+  }
+
+  if (category === "storage") {
+    baseName = baseName
+      .replace(/,\s*(?:PCIe\s*\d(?:\.\d)?\s*)?(?:NVMe\s*)?(?:M\.2\s*2280|M\.2|2\.5[”"]?|2,5[”"]?|3\.5[”"]?|3,5[”"]?)\s*(?:SSD|HDD)?-?levy\b/gi, "")
+      .replace(/\s+(?:SSD|HDD)?-?levy\b/gi, "")
+      .replace(/,\s*(?:NVMe|SATA|PCIe\s*\d(?:\.\d)?(?:\s*x\d+)?|M\.2\s*2280|M\.2|2\.5[”"]?|2,5[”"]?|3\.5[”"]?|3,5[”"]?)\b/gi, "")
+      .replace(/,\s*\d+\/\d+\s*MB\/s\b/gi, "");
+  }
+
+  if (category === "case") {
+    baseName = baseName
+      .replace(/,\s*(ikkunallinen\s*)?(miditornikotelo|mATX-kotelo|ATX-kotelo|Mini-ITX-kotelo|kotelo)\b/gi, "")
+      .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
+  }
+
+  if (category === "psu") {
+    baseName = baseName
+      .replace(/^\s*\d{3,4}W\s+/i, "")
+      .replace(/,\s*ATX-virtalähde\b/gi, "")
+      .replace(/,\s*virtalähde\b/gi, "")
+      .replace(/,\s*80\s*Plus\s*(?:Bronze|Silver|Gold|Platinum|Titanium)\b/gi, "")
       .replace(/,\s*[^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*$/gi, "");
   }
 
