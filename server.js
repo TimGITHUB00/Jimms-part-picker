@@ -130,6 +130,10 @@ function decodeHtml(value) {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&Auml;/g, "\u00c4")
+    .replace(/&Ouml;/g, "\u00d6")
+    .replace(/&auml;/g, "\u00e4")
+    .replace(/&ouml;/g, "\u00f6")
     .replace(/&euro;/g, "€")
     .replace(/&#196;/g, "Ä")
     .replace(/&#214;/g, "Ö")
@@ -269,6 +273,62 @@ function detectRadiatorSize(text) {
   return match ? Number(match[1]) : null;
 }
 
+function extractRadiatorSizes(text) {
+  const sizes = new Set();
+  for (const match of text.matchAll(/\b(120|140|240|280|360|420)\s*mm\b/gi)) {
+    sizes.add(Number(match[1]));
+  }
+  for (const match of text.matchAll(/\b((?:120|140|240|280|360|420)(?:\s*\/\s*(?:120|140|240|280|360|420))+)\s*mm\b/gi)) {
+    match[1].split(/\s*\/\s*/).forEach((size) => sizes.add(Number(size)));
+  }
+  return [...sizes].sort((a, b) => b - a);
+}
+
+function detectCaseRadiatorSupport(text) {
+  const support = new Map();
+  const radiatorTerms = /radiator|j.{1,6}hdytin|vesij.{1,6}hdytys|nestej.{1,6}hdytys|liquid cooling/i;
+  const locationPatterns = [
+    ["front", /\b(front|etu|edess.{1,3})\b/i],
+    ["top", /\b(top|katto|katossa|yl.{1,3}osa|ylh.{1,6}ll.{1,3})\b/i],
+    ["rear", /\b(rear|taka|takana)\b/i],
+    ["bottom", /\b(bottom|pohja|pohjassa)\b/i],
+    ["side", /\b(side|sivu|sivulla)\b/i]
+  ];
+
+  function add(location, size) {
+    if (!support.has(location)) support.set(location, new Set());
+    support.get(location).add(size);
+  }
+
+  const lines = text.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  let radiatorContext = 0;
+  for (const line of lines) {
+    if (radiatorTerms.test(line)) radiatorContext = 30;
+    const isRelevant = radiatorContext > 0 || radiatorTerms.test(line);
+    if (!isRelevant) continue;
+    radiatorContext -= 1;
+
+    const sizes = extractRadiatorSizes(line);
+    if (sizes.length === 0) continue;
+
+    const locations = locationPatterns
+      .filter(([, pattern]) => pattern.test(line))
+      .map(([location]) => location);
+
+    for (const size of sizes) {
+      if (locations.length === 0) {
+        add("listed", size);
+      } else {
+        locations.forEach((location) => add(location, size));
+      }
+    }
+  }
+
+  return [...support.entries()]
+    .map(([location, sizes]) => ({ location, sizes: [...sizes].sort((a, b) => b - a) }))
+    .sort((a, b) => (b.sizes[0] || 0) - (a.sizes[0] || 0));
+}
+
 function detectCoolerType(text, category) {
   if (category === "aio" || /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text)) return "AIO";
   return "Air";
@@ -333,6 +393,24 @@ function extractMetaTitle(html) {
   return match ? decodeHtml(match[1]) : "";
 }
 
+function extractCaseSpecText(html, detailText) {
+  const markers = [
+    "J&auml;&auml;hdytintuki",
+    "Jäähdytintuki",
+    "JÃ¤Ã¤hdytintuki",
+    "Radiator support"
+  ];
+  const index = markers
+    .map((marker) => html.indexOf(marker))
+    .filter((position) => position >= 0)
+    .sort((a, b) => a - b)[0];
+
+  if (index === undefined) return detailText || "";
+
+  const slice = html.slice(Math.max(0, index - 120), index + 1400);
+  return `${detailText || ""}\n${textFromHtml(slice)}`;
+}
+
 function parseMotherboardDetails(text) {
   const specs = {};
   const pcieSlots = [...new Set([...text.matchAll(/\b\d+\s*x\s*PCIe\s*\d(?:\.\d)?\s*x\d+\s*slots?(?:\s*\([^)]*\))?/gi)].map((match) => match[0].replace(/\s+/g, " ")))];
@@ -374,6 +452,18 @@ function parseCoolerDetails(text) {
   return specs;
 }
 
+function parseCaseDetails(text) {
+  const specs = {};
+  const radiatorSupport = detectCaseRadiatorSupport(text);
+
+  if (radiatorSupport.length > 0) {
+    specs.radiatorSupport = radiatorSupport;
+    specs.maxRadiatorSize = Math.max(...radiatorSupport.flatMap((mount) => mount.sizes));
+  }
+
+  return specs;
+}
+
 async function fetchProductDetails(category, sourceUrl) {
   if (!sourceUrl) return {};
 
@@ -408,6 +498,10 @@ async function fetchProductDetails(category, sourceUrl) {
 
   if (category === "motherboard") {
     Object.assign(specs, parseMotherboardDetails(detailText || html));
+  }
+
+  if (category === "case") {
+    Object.assign(specs, parseCaseDetails(extractCaseSpecText(html, detailText)));
   }
 
   const details = { specs, detailSource: "jimms.fi product page" };

@@ -205,7 +205,7 @@ function renderProducts() {
 }
 
 async function enrichSelectedProduct(slot, product) {
-  if (!["cooling", "motherboard"].includes(slot) || !product.sourceUrl) return;
+  if (!["cooling", "motherboard", "case"].includes(slot) || !product.sourceUrl) return;
 
   try {
     const response = await fetch(`/api/product-details?category=${encodeURIComponent(product.category)}&url=${encodeURIComponent(product.sourceUrl)}`);
@@ -276,6 +276,7 @@ function getSpecValues(product) {
   if (specs.formFactor) values.push(specs.formFactor);
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm`);
+  if (specs.maxRadiatorSize) values.push(`Up to ${specs.maxRadiatorSize}mm radiator`);
   if (specs.wattage) values.push(`${specs.wattage}W`);
   if (Array.isArray(specs.supportedFormFactors)) values.push(...specs.supportedFormFactors);
   return [...new Set(values.filter(Boolean))];
@@ -385,6 +386,7 @@ function renderSpecTags(card, product) {
   if (specs.inferredCapacity?.label) tags.push(specs.inferredCapacity.label);
   if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) tags.push(`${specs.m2Slots.length} M.2`);
   if (specs.sataPorts) tags.push(`${specs.sataPorts} SATA`);
+  if (specs.maxRadiatorSize) tags.push(`Up to ${specs.maxRadiatorSize}mm rad`);
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
     tags.push(specs.supportedFormFactors.join("/"));
   }
@@ -485,6 +487,9 @@ function productDetailValues(product) {
   if (specs.formFactor) values.push(specs.formFactor);
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
+  if (Array.isArray(specs.radiatorSupport) && specs.radiatorSupport.length > 0) {
+    values.push(`Radiators: ${formatRadiatorSupport(specs.radiatorSupport)}`);
+  }
   if (specs.color) values.push(specs.color);
   if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) values.push(`Sockets: ${specs.supportedSockets.join(", ")}`);
   if (specs.heatRating) values.push(`${specs.heatRating}W heat rating`);
@@ -514,6 +519,27 @@ function productDetailValues(product) {
   }
 
   return [...new Set(values.filter(Boolean))];
+}
+
+function formatRadiatorLocation(location) {
+  return {
+    front: "front",
+    top: "top",
+    rear: "rear",
+    bottom: "bottom",
+    side: "side",
+    listed: "listed"
+  }[location] || location;
+}
+
+function formatRadiatorSupport(support) {
+  return support
+    .map((mount) => `${formatRadiatorLocation(mount.location)} ${mount.sizes.join("/")}mm`)
+    .join(", ");
+}
+
+function findRadiatorMount(support, radiatorSize) {
+  return support.find((mount) => mount.sizes.some((size) => size >= radiatorSize));
 }
 
 function renderProductDetails(card, product) {
@@ -653,7 +679,19 @@ function updateCompatibility() {
   }
 
   if (parts.case && parts.cooling?.specs?.radiatorSize) {
-    addCheck(checks, "info", `Confirm the case has clearance for a ${parts.cooling.specs.radiatorSize}mm radiator.`);
+    const radiatorSize = parts.cooling.specs.radiatorSize;
+    const radiatorSupport = parts.case.specs?.radiatorSupport || [];
+    const mount = findRadiatorMount(radiatorSupport, radiatorSize);
+
+    if (mount) {
+      addCheck(checks, "ok", `Case lists ${formatRadiatorLocation(mount.location)} radiator support for ${mount.sizes.join("/")}mm, so the ${radiatorSize}mm AIO should fit.`);
+    } else if (radiatorSupport.length > 0) {
+      addCheck(checks, "error", `Selected case radiator support appears limited to ${formatRadiatorSupport(radiatorSupport)}; it may not fit a ${radiatorSize}mm AIO.`);
+    } else if (parts.case.detailSource) {
+      addCheck(checks, "warn", `Jimms case page did not list radiator clearance. Confirm the case supports a ${radiatorSize}mm radiator.`);
+    } else {
+      addCheck(checks, "info", `Case radiator clearance is loading from the Jimms product page for the ${radiatorSize}mm AIO.`);
+    }
   }
 
   if (parts.psu) {
