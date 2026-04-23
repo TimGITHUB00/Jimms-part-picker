@@ -83,6 +83,10 @@ function productsReadyForJimmsCart() {
   return selectedBuildProducts().filter((product) => product.productId && product.productGuid);
 }
 
+function formatSkippedCartProducts(products) {
+  return products.map((product) => product.displayName || cleanProductName(product)).join(", ");
+}
+
 function buildJimmsAddToCartUrl(product) {
   const params = new URLSearchParams({
     ProductID: String(product.productId),
@@ -400,14 +404,15 @@ function updateTotal() {
 function updateBuildActions() {
   const selected = selectedBuildProducts();
   const ready = productsReadyForJimmsCart();
-  const skipped = selected.length - ready.length;
+  const skippedProducts = selected.filter((product) => !(product.productId && product.productGuid));
+  const skipped = skippedProducts.length;
 
   addToJimmsCart.disabled = ready.length === 0;
   addToJimmsCart.textContent = ready.length > 0
     ? `Add ${ready.length} Part${ready.length === 1 ? "" : "s"} to Jimms Cart`
     : "Add Build to Jimms Cart";
   addToJimmsCart.title = skipped > 0
-    ? `${skipped} selected part${skipped === 1 ? " is" : "s are"} missing Jimms cart data and will be skipped.`
+    ? `${skipped} selected part${skipped === 1 ? "" : "s"} cannot be added automatically to Jimms cart: ${formatSkippedCartProducts(skippedProducts)}.`
     : "Open the selected build in Jimms cart.";
 }
 
@@ -432,7 +437,7 @@ function openBuildInJimmsCart() {
 
   if (skipped.length > 0) {
     window.setTimeout(() => {
-      window.alert(`${skipped.length} selected part${skipped.length === 1 ? "" : "s"} could not be added automatically and were skipped.`);
+      window.alert(`These selected part${skipped.length === 1 ? "" : "s"} could not be added automatically to Jimms cart:\n\n${formatSkippedCartProducts(skipped)}`);
     }, 50);
   }
 
