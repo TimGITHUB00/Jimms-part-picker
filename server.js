@@ -358,6 +358,23 @@ function detectHeatRating(text) {
   return null;
 }
 
+function detectDimensionTriples(text) {
+  return [...text.matchAll(/\b(\d{2,4})\s*x\s*(\d{2,4})\s*x\s*(\d{2,4})\s*mm\b/gi)]
+    .map((match) => match.slice(1, 4).map(Number));
+}
+
+function firstTripleAfterLabel(text, labelPattern) {
+  const match = text.match(new RegExp(`(?:${labelPattern.source})[\\s:]*([\\s\\S]{0,80})`, "i"));
+  if (!match) return null;
+  const triple = match[1].match(/(\d{2,4})\s*x\s*(\d{2,4})\s*x\s*(\d{2,4})\s*mm/i);
+  return triple ? triple.slice(1, 4).map(Number) : null;
+}
+
+function firstNumberAfterLabel(text, labelPattern, limit = 120) {
+  const match = text.match(new RegExp(`(?:${labelPattern.source})[\\s\\S]{0,${limit}}?(\\d{2,4})\\s*mm`, "i"));
+  return match ? Number(match[1]) : null;
+}
+
 function inferCoolerCapacity(text, category) {
   const radiatorSize = detectRadiatorSize(text);
   if (category === "aio" || /\b(AIO|nestejäähdytys|vesijäähdytys|liquid)\b/i.test(text)) {
@@ -464,6 +481,53 @@ function parseCaseDetails(text) {
   return specs;
 }
 
+function parseCoolerPhysicalDetails(text) {
+  const specs = {};
+  const isAio = /\b(AIO|nestej.{1,6}hdytys|vesij.{1,6}hdytys|liquid)\b/i.test(text);
+  const dimensions = firstTripleAfterLabel(text, /Mitat\s*\(PxLxK\)|Mitat|Dimensions|Koko/) || detectDimensionTriples(text)[0];
+
+  if (!isAio && dimensions) {
+    specs.coolerHeightMm = dimensions[2];
+  }
+
+  return specs;
+}
+
+function parseCaseClearanceDetails(text) {
+  const specs = {};
+  const maxGpuLengthMm = firstNumberAfterLabel(text, /N.{0,6}yt.{0,3}nohjaimen pituus|GPU length|graphics card length/);
+  const maxCpuCoolerHeightMm = firstNumberAfterLabel(text, /Prosessorij.{1,10}hdyttimen korkeus|CPU cooler height|cooler height/);
+  const maxPsuLengthMm = firstNumberAfterLabel(text, /Virtal.{1,6}hteen pituus|PSU length|power supply length/, 180);
+
+  if (maxGpuLengthMm) specs.maxGpuLengthMm = maxGpuLengthMm;
+  if (maxCpuCoolerHeightMm) specs.maxCpuCoolerHeightMm = maxCpuCoolerHeightMm;
+  if (maxPsuLengthMm) specs.maxPsuLengthMm = maxPsuLengthMm;
+
+  return specs;
+}
+
+function parseGpuDetails(text) {
+  const specs = {};
+  const dimensions = firstTripleAfterLabel(text, /Mitat|Dimensions|Koko/) || detectDimensionTriples(text)[0];
+
+  if (dimensions) {
+    specs.gpuLengthMm = dimensions[0];
+  }
+
+  return specs;
+}
+
+function parsePsuDetails(text) {
+  const specs = {};
+  const dimensions = firstTripleAfterLabel(text, /Mitat|Dimensions|Koko/) || detectDimensionTriples(text)[0];
+
+  if (dimensions) {
+    specs.psuLengthMm = dimensions[0];
+  }
+
+  return specs;
+}
+
 async function fetchProductDetails(category, sourceUrl) {
   if (!sourceUrl) return {};
 
@@ -494,6 +558,7 @@ async function fetchProductDetails(category, sourceUrl) {
 
   if (category === "cooler" || category === "aio") {
     Object.assign(specs, parseCoolerDetails(`${titleText}\n${detailText || ""}`));
+    Object.assign(specs, parseCoolerPhysicalDetails(`${titleText}\n${detailText || ""}`));
   }
 
   if (category === "motherboard") {
@@ -501,7 +566,17 @@ async function fetchProductDetails(category, sourceUrl) {
   }
 
   if (category === "case") {
-    Object.assign(specs, parseCaseDetails(extractCaseSpecText(html, detailText)));
+    const caseText = extractCaseSpecText(html, detailText);
+    Object.assign(specs, parseCaseDetails(caseText));
+    Object.assign(specs, parseCaseClearanceDetails(caseText));
+  }
+
+  if (category === "gpu") {
+    Object.assign(specs, parseGpuDetails(`${titleText}\n${detailText || ""}`));
+  }
+
+  if (category === "psu") {
+    Object.assign(specs, parsePsuDetails(`${titleText}\n${detailText || ""}`));
   }
 
   const details = { specs, detailSource: "jimms.fi product page" };

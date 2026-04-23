@@ -205,7 +205,7 @@ function renderProducts() {
 }
 
 async function enrichSelectedProduct(slot, product) {
-  if (!["cooling", "motherboard", "case"].includes(slot) || !product.sourceUrl) return;
+  if (!["cooling", "motherboard", "case", "gpu", "psu"].includes(slot) || !product.sourceUrl) return;
 
   try {
     const response = await fetch(`/api/product-details?category=${encodeURIComponent(product.category)}&url=${encodeURIComponent(product.sourceUrl)}`);
@@ -276,7 +276,13 @@ function getSpecValues(product) {
   if (specs.formFactor) values.push(specs.formFactor);
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm`);
+  if (specs.coolerHeightMm) values.push(`${specs.coolerHeightMm}mm cooler height`);
+  if (specs.gpuLengthMm) values.push(`${specs.gpuLengthMm}mm GPU length`);
+  if (specs.psuLengthMm) values.push(`${specs.psuLengthMm}mm PSU length`);
   if (specs.maxRadiatorSize) values.push(`Up to ${specs.maxRadiatorSize}mm radiator`);
+  if (specs.maxGpuLengthMm) values.push(`GPU up to ${specs.maxGpuLengthMm}mm`);
+  if (specs.maxCpuCoolerHeightMm) values.push(`Cooler up to ${specs.maxCpuCoolerHeightMm}mm`);
+  if (specs.maxPsuLengthMm) values.push(`PSU up to ${specs.maxPsuLengthMm}mm`);
   if (specs.wattage) values.push(`${specs.wattage}W`);
   if (Array.isArray(specs.supportedFormFactors)) values.push(...specs.supportedFormFactors);
   return [...new Set(values.filter(Boolean))];
@@ -381,12 +387,18 @@ function renderSpecTags(card, product) {
   if (specs.estimatedWatts) tags.push(`~${specs.estimatedWatts}W`);
   if (specs.coolerType) tags.push(specs.coolerType);
   if (specs.radiatorSize) tags.push(`${specs.radiatorSize}mm`);
+  if (specs.coolerHeightMm) tags.push(`${specs.coolerHeightMm}mm tall`);
+  if (specs.gpuLengthMm) tags.push(`${specs.gpuLengthMm}mm long`);
+  if (specs.psuLengthMm) tags.push(`${specs.psuLengthMm}mm long`);
   if (Array.isArray(specs.supportedSockets) && specs.supportedSockets.length > 0) tags.push(specs.supportedSockets.slice(0, 3).join("/"));
   if (specs.heatRating) tags.push(`${specs.heatRating}W TDP`);
   if (specs.inferredCapacity?.label) tags.push(specs.inferredCapacity.label);
   if (Array.isArray(specs.m2Slots) && specs.m2Slots.length > 0) tags.push(`${specs.m2Slots.length} M.2`);
   if (specs.sataPorts) tags.push(`${specs.sataPorts} SATA`);
   if (specs.maxRadiatorSize) tags.push(`Up to ${specs.maxRadiatorSize}mm rad`);
+  if (specs.maxGpuLengthMm) tags.push(`GPU ${specs.maxGpuLengthMm}mm`);
+  if (specs.maxCpuCoolerHeightMm) tags.push(`Cooler ${specs.maxCpuCoolerHeightMm}mm`);
+  if (specs.maxPsuLengthMm) tags.push(`PSU ${specs.maxPsuLengthMm}mm`);
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
     tags.push(specs.supportedFormFactors.join("/"));
   }
@@ -487,6 +499,9 @@ function productDetailValues(product) {
   if (specs.formFactor) values.push(specs.formFactor);
   if (specs.coolerType) values.push(specs.coolerType);
   if (specs.radiatorSize) values.push(`${specs.radiatorSize}mm radiator`);
+  if (specs.coolerHeightMm) values.push(`${specs.coolerHeightMm}mm cooler height`);
+  if (specs.gpuLengthMm) values.push(`${specs.gpuLengthMm}mm GPU length`);
+  if (specs.psuLengthMm) values.push(`${specs.psuLengthMm}mm PSU length`);
   if (Array.isArray(specs.radiatorSupport) && specs.radiatorSupport.length > 0) {
     values.push(`Radiators: ${formatRadiatorSupport(specs.radiatorSupport)}`);
   }
@@ -517,6 +532,9 @@ function productDetailValues(product) {
   if (Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length > 0) {
     values.push(`Fits ${specs.supportedFormFactors.join(", ")}`);
   }
+  if (specs.maxGpuLengthMm) values.push(`GPU up to ${specs.maxGpuLengthMm}mm`);
+  if (specs.maxCpuCoolerHeightMm) values.push(`Cooler up to ${specs.maxCpuCoolerHeightMm}mm`);
+  if (specs.maxPsuLengthMm) values.push(`PSU up to ${specs.maxPsuLengthMm}mm`);
 
   return [...new Set(values.filter(Boolean))];
 }
@@ -571,6 +589,27 @@ function estimateBuildWatts(parts) {
 
 function addCheck(checks, type, text) {
   checks.push({ type, text });
+}
+
+function compareDimensionFit(checks, itemLabel, itemSize, limitLabel, limitSize, detailLoaded, readyText, missingLimitText, loadingText) {
+  if (!itemSize) return false;
+
+  if (limitSize) {
+    if (itemSize <= limitSize) {
+      addCheck(checks, "ok", readyText(itemSize, limitSize));
+    } else {
+      addCheck(checks, "error", `${itemLabel} ${itemSize}mm exceeds the case ${limitLabel} limit of ${limitSize}mm.`);
+    }
+    return true;
+  }
+
+  if (detailLoaded && missingLimitText) {
+    addCheck(checks, "warn", missingLimitText(itemSize));
+  } else if (loadingText) {
+    addCheck(checks, "info", loadingText(itemSize));
+  }
+
+  return true;
 }
 
 function updateCompatibility() {
@@ -659,7 +698,7 @@ function updateCompatibility() {
       }
     } else if (cpuWatts >= 170 && !heatRating) {
       addCheck(checks, "warn", "High-power CPU selected. Prefer a cooler with a clearly listed high heat rating.");
-    } else {
+    } else if (!parts.case) {
       addCheck(checks, "info", "Air cooler physical clearance still depends on case and RAM height.");
     }
   }
@@ -692,6 +731,54 @@ function updateCompatibility() {
     } else {
       addCheck(checks, "info", `Case radiator clearance is loading from the Jimms product page for the ${radiatorSize}mm AIO.`);
     }
+  }
+
+  if (parts.case && parts.cooling?.specs?.coolerType === "Air" && parts.cooling?.specs?.coolerHeightMm) {
+    compareDimensionFit(
+      checks,
+      "Air cooler height",
+      parts.cooling.specs.coolerHeightMm,
+      "CPU cooler",
+      parts.case.specs?.maxCpuCoolerHeightMm,
+      Boolean(parts.case.detailSource),
+      (itemSize, limitSize) => `Air cooler height ${itemSize}mm fits within the case CPU cooler limit of ${limitSize}mm.`,
+      (itemSize) => `Jimms case page did not list CPU cooler height clearance. Confirm the case fits a ${itemSize}mm air cooler.`,
+      (itemSize) => `Case CPU cooler clearance is loading from the Jimms product page for the ${itemSize}mm air cooler.`
+    );
+  } else if (parts.case && parts.cooling?.specs?.coolerType === "Air" && parts.cooling?.detailSource) {
+    addCheck(checks, "warn", "Jimms cooler page did not list air cooler height for this product.");
+  }
+
+  if (parts.case && parts.gpu?.specs?.gpuLengthMm) {
+    compareDimensionFit(
+      checks,
+      "GPU length",
+      parts.gpu.specs.gpuLengthMm,
+      "GPU",
+      parts.case.specs?.maxGpuLengthMm,
+      Boolean(parts.case.detailSource),
+      (itemSize, limitSize) => `GPU length ${itemSize}mm fits within the case GPU limit of ${limitSize}mm.`,
+      (itemSize) => `Jimms case page did not list GPU clearance. Confirm the case fits a ${itemSize}mm graphics card.`,
+      (itemSize) => `Case GPU clearance is loading from the Jimms product page for the ${itemSize}mm graphics card.`
+    );
+  } else if (parts.case && parts.gpu?.detailSource) {
+    addCheck(checks, "warn", "Jimms GPU page did not list card length for this product.");
+  }
+
+  if (parts.case && parts.psu?.specs?.psuLengthMm) {
+    compareDimensionFit(
+      checks,
+      "PSU length",
+      parts.psu.specs.psuLengthMm,
+      "PSU",
+      parts.case.specs?.maxPsuLengthMm,
+      Boolean(parts.case.detailSource),
+      (itemSize, limitSize) => `PSU length ${itemSize}mm fits within the case PSU limit of ${limitSize}mm.`,
+      (itemSize) => `Jimms case page did not list PSU clearance. Confirm the case fits a ${itemSize}mm power supply.`,
+      (itemSize) => `Case PSU clearance is loading from the Jimms product page for the ${itemSize}mm power supply.`
+    );
+  } else if (parts.case && parts.psu?.detailSource) {
+    addCheck(checks, "warn", "Jimms PSU page did not list PSU length for this product.");
   }
 
   if (parts.psu) {
