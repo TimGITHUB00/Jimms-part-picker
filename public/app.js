@@ -471,23 +471,30 @@ async function openBuildInJimmsCart() {
   const ready = resolvedEntries.filter((entry) => entry.cartUrl);
   const skipped = resolvedEntries.filter((entry) => !entry.cartUrl).map((entry) => entry.product);
 
+  function openManualProductTabs(products, startDelay = 300) {
+    products.forEach((product, index) => {
+      if (!product.sourceUrl) return;
+      window.setTimeout(() => {
+        window.open(product.sourceUrl, "_blank", "noopener");
+      }, startDelay + (index * 180));
+    });
+  }
+
   if (ready.length === 0) {
-    helperTab.close();
-    window.alert("None of the selected parts could be added to Jimms cart automatically.");
+    helperTab.document.body.innerHTML = "<strong>Opening Jimms product pages for manual add...</strong><p>The shopping cart will open too.</p>";
+    window.open("https://www.jimms.fi/fi/ShoppingCart", helperWindowName);
+    openManualProductTabs(selected, 260);
+    window.setTimeout(() => {
+      window.alert(`Jimms did not accept automatic cart adds for this build.\n\nI opened the selected product pages so you can add them manually:\n\n${formatSkippedCartProducts(selected)}`);
+    }, 80);
     return;
   }
 
   if (skipped.length > 0) {
     window.setTimeout(() => {
-      window.alert(`These selected part${skipped.length === 1 ? "" : "s"} could not be added automatically to Jimms cart:\n\n${formatSkippedCartProducts(skipped)}`);
+      window.alert(`These selected part${skipped.length === 1 ? "" : "s"} could not be added automatically to Jimms cart.\n\nTheir Jimms product pages were opened so you can add them manually:\n\n${formatSkippedCartProducts(skipped)}`);
     }, 50);
-
-    skipped.forEach((product, index) => {
-      if (!product.sourceUrl) return;
-      window.setTimeout(() => {
-        window.open(product.sourceUrl, "_blank", "noopener");
-      }, 300 + (index * 180));
-    });
+    openManualProductTabs(skipped, 300);
   }
 
   const addUrls = ready.map((entry) => entry.cartUrl);
