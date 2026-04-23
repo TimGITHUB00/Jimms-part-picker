@@ -96,6 +96,30 @@ function buildJimmsAddToCartUrl(product) {
   return `https://www.jimms.fi/fi/ShoppingCart/AddItem?${params.toString()}`;
 }
 
+async function resolveProductCartUrl(product) {
+  if (product.productId && product.productGuid) {
+    return buildJimmsAddToCartUrl(product);
+  }
+
+  if (!product.sourceUrl) return null;
+
+  const params = new URLSearchParams({
+    url: product.sourceUrl
+  });
+  if (product.productId) params.set("productId", String(product.productId));
+  if (product.productGuid) params.set("productGuid", String(product.productGuid));
+
+  try {
+    const response = await fetch(`/api/cart-link?${params.toString()}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.cartUrl || null;
+  } catch (error) {
+    console.warn("Could not resolve Jimms cart link", error);
+    return null;
+  }
+}
+
 function productCategoryLabel(key) {
   if (key === "cooler") return "Air Coolers";
   if (key === "aio") return "AIO Coolers";
@@ -407,20 +431,19 @@ function updateBuildActions() {
   const skippedProducts = selected.filter((product) => !(product.productId && product.productGuid));
   const skipped = skippedProducts.length;
 
-  addToJimmsCart.disabled = ready.length === 0;
-  addToJimmsCart.textContent = ready.length > 0
-    ? `Add ${ready.length} Part${ready.length === 1 ? "" : "s"} to Jimms Cart`
+  addToJimmsCart.disabled = selected.length === 0;
+  addToJimmsCart.textContent = selected.length > 0
+    ? `Add ${selected.length} Part${selected.length === 1 ? "" : "s"} to Jimms Cart`
     : "Add Build to Jimms Cart";
   addToJimmsCart.title = skipped > 0
-    ? `${skipped} selected part${skipped === 1 ? "" : "s"} cannot be added automatically to Jimms cart: ${formatSkippedCartProducts(skippedProducts)}.`
+    ? `${skipped} selected part${skipped === 1 ? "" : "s"} need an extra Jimms page lookup before they can be added: ${formatSkippedCartProducts(skippedProducts)}.`
     : "Open the selected build in Jimms cart.";
 }
 
-function openBuildInJimmsCart() {
+async function openBuildInJimmsCart() {
   const selected = selectedBuildProducts();
-  const ready = productsReadyForJimmsCart();
 
-  if (ready.length === 0) {
+  if (selected.length === 0) {
     window.alert("Select at least one Jimms product before opening the Jimms cart.");
     return;
   }
@@ -431,9 +454,27 @@ function openBuildInJimmsCart() {
     return;
   }
 
-  const skipped = selected.filter((product) => !(product.productId && product.productGuid));
   helperTab.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Opening Jimms Cart</title><style>body{font-family:Inter,Arial,sans-serif;padding:24px;line-height:1.5;color:#1f2937}strong{display:block;margin-bottom:8px;font-size:1.05rem}</style></head><body><strong>Adding your build to Jimms cart...</strong><p>This tab will open the selected products and then land on Jimms.fi Shopping Cart.</p></body></html>`);
   helperTab.document.close();
+
+  addToJimmsCart.disabled = true;
+  addToJimmsCart.textContent = "Preparing Jimms Cart...";
+
+  const resolvedEntries = await Promise.all(selected.map(async (product) => ({
+    product,
+    cartUrl: await resolveProductCartUrl(product)
+  })));
+
+  updateBuildActions();
+
+  const ready = resolvedEntries.filter((entry) => entry.cartUrl);
+  const skipped = resolvedEntries.filter((entry) => !entry.cartUrl).map((entry) => entry.product);
+
+  if (ready.length === 0) {
+    helperTab.close();
+    window.alert("None of the selected parts could be added to Jimms cart automatically.");
+    return;
+  }
 
   if (skipped.length > 0) {
     window.setTimeout(() => {
@@ -441,7 +482,7 @@ function openBuildInJimmsCart() {
     }, 50);
   }
 
-  const addUrls = ready.map(buildJimmsAddToCartUrl);
+  const addUrls = ready.map((entry) => entry.cartUrl);
   const startDelayMs = 160;
   const stepDelayMs = 900;
   addUrls.forEach((url, index) => {

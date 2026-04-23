@@ -21,6 +21,7 @@ const categories = {
 
 const cache = new Map();
 const detailCache = new Map();
+const cartLinkCache = new Map();
 const cacheMs = 1000 * 60 * 12;
 const pageSize = 100;
 const maxPagesPerCategory = 30;
@@ -586,6 +587,45 @@ async function fetchProductDetails(category, sourceUrl) {
   return details;
 }
 
+async function resolveCartLink(sourceUrl, productId, productGuid) {
+  if (productId && productGuid) {
+    const params = new URLSearchParams({
+      ProductID: String(productId),
+      Qty: "1",
+      ProductGuid: String(productGuid)
+    });
+    return `${JIMMS_BASE}/fi/ShoppingCart/AddItem?${params.toString()}`;
+  }
+
+  if (!sourceUrl) return null;
+
+  const parsedUrl = new URL(sourceUrl, JIMMS_BASE);
+  if (parsedUrl.hostname !== "www.jimms.fi") return null;
+
+  const cacheKey = `cart:${parsedUrl.href}`;
+  const cached = cartLinkCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < cacheMs) {
+    return cached.url;
+  }
+
+  const response = await fetch(parsedUrl.href, {
+    headers: {
+      "User-Agent": "JimmsPartPicker/1.0 (+local development)",
+      "Accept-Language": "fi-FI,fi;q=0.9,en;q=0.8"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jimms.fi returned ${response.status}`);
+  }
+
+  const html = await response.text();
+  const match = html.match(/href="(\/fi\/ShoppingCart\/AddItem\?ProductID=\d+&amp;Qty=\d+&amp;ProductGuid=[^"]+)"/i);
+  const cartUrl = match ? `${JIMMS_BASE}${decodeHtml(match[1])}` : null;
+  cartLinkCache.set(cacheKey, { createdAt: Date.now(), url: cartUrl });
+  return cartUrl;
+}
+
 function estimateCpuWatts(text) {
   if (/threadripper|xeon/i.test(text)) return 280;
   if (/ryzen 9|core i9|ultra 9/i.test(text)) return 170;
@@ -694,6 +734,13 @@ function mapApiProduct(apiProduct, category) {
   return item;
 }
 
+function isBundleApiProduct(apiProduct) {
+  const text = `${apiProduct.Name || ""} ${apiProduct.LongName || ""} ${apiProduct.ProductGroupName || ""}`;
+  return apiProduct.ProductTypeID === 12
+    || apiProduct.Flags === 2
+    || /tuotepaketti|bundle|paketti/i.test(text);
+}
+
 function buildDisplayName(apiProduct, category) {
   const brand = apiProduct.VendorName || "";
   let baseName = apiProduct.Name || "";
@@ -799,14 +846,14 @@ async function fetchJsonPage(categoryKey, page) {
 
 async function fetchCategoryFromJimms(categoryKey) {
   const firstPage = await fetchJsonPage(categoryKey, 1);
-  const firstProducts = firstPage.Products || [];
+  const firstProducts = (firstPage.Products || []).filter((item) => !isBundleApiProduct(item));
   const count = firstPage.FilteredCount || firstPage.Count || firstProducts.length;
   const totalPages = Math.min(Math.ceil(count / pageSize), maxPagesPerCategory);
   const products = [...firstProducts];
 
   for (let page = 2; page <= totalPages; page += 1) {
     const data = await fetchJsonPage(categoryKey, page);
-    products.push(...(data.Products || []));
+    products.push(...(data.Products || []).filter((item) => !isBundleApiProduct(item)));
   }
 
   return {
@@ -905,6 +952,20 @@ const server = http.createServer(async (req, res) => {
         specs: {},
         detailSource: `unavailable (${error.message})`
       });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/cart-link") {
+    const sourceUrl = url.searchParams.get("url") || "";
+    const productId = url.searchParams.get("productId") || "";
+    const productGuid = url.searchParams.get("productGuid") || "";
+
+    try {
+      const cartUrl = await resolveCartLink(sourceUrl, productId, productGuid);
+      sendJson(res, 200, { cartUrl });
+    } catch (error) {
+      sendJson(res, 200, { cartUrl: null, error: error.message });
     }
     return;
   }
