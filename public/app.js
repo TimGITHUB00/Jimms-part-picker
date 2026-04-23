@@ -448,7 +448,8 @@ async function openBuildInJimmsCart() {
     return;
   }
 
-  const helperTab = window.open("about:blank", "_blank");
+  const helperWindowName = `jimms-cart-build-${Date.now()}`;
+  const helperTab = window.open("about:blank", helperWindowName);
   if (!helperTab) {
     window.alert("Allow pop-ups for this site so the Jimms cart tab can open.");
     return;
@@ -480,20 +481,27 @@ async function openBuildInJimmsCart() {
     window.setTimeout(() => {
       window.alert(`These selected part${skipped.length === 1 ? "" : "s"} could not be added automatically to Jimms cart:\n\n${formatSkippedCartProducts(skipped)}`);
     }, 50);
+
+    skipped.forEach((product, index) => {
+      if (!product.sourceUrl) return;
+      window.setTimeout(() => {
+        window.open(product.sourceUrl, "_blank", "noopener");
+      }, 300 + (index * 180));
+    });
   }
 
   const addUrls = ready.map((entry) => entry.cartUrl);
-  const startDelayMs = 160;
-  const stepDelayMs = 900;
+  const startDelayMs = 220;
+  const stepDelayMs = 1400;
   addUrls.forEach((url, index) => {
     window.setTimeout(() => {
-      if (!helperTab.closed) helperTab.location.replace(url);
+      window.open(url, helperWindowName);
     }, startDelayMs + (index * stepDelayMs));
   });
 
   window.setTimeout(() => {
-    if (!helperTab.closed) helperTab.location.replace("https://www.jimms.fi/fi/ShoppingCart");
-  }, startDelayMs + (addUrls.length * stepDelayMs) + 600);
+    window.open("https://www.jimms.fi/fi/ShoppingCart", helperWindowName);
+  }, startDelayMs + (addUrls.length * stepDelayMs) + 900);
 }
 
 function renderSpecTags(card, product) {
