@@ -48,6 +48,7 @@ const catalogMeta = document.querySelector("#catalogMeta");
 const sourcePill = document.querySelector("#sourcePill");
 const jimmsLink = document.querySelector("#jimmsLink");
 const clearBuild = document.querySelector("#clearBuild");
+const addToJimmsCart = document.querySelector("#addToJimmsCart");
 const compatibilityPanel = document.querySelector("#compatibilityPanel");
 const compatibilityBadge = document.querySelector("#compatibilityBadge");
 const compatibilityTitle = document.querySelector("#compatibilityTitle");
@@ -70,6 +71,25 @@ function formatEuro(value) {
 
 function categoryLabel(key) {
   return categories.find(([id]) => id === key)?.[1] || key;
+}
+
+function selectedBuildProducts() {
+  return categories
+    .map(([key]) => state.selected[key])
+    .filter(Boolean);
+}
+
+function productsReadyForJimmsCart() {
+  return selectedBuildProducts().filter((product) => product.productId && product.productGuid);
+}
+
+function buildJimmsAddToCartUrl(product) {
+  const params = new URLSearchParams({
+    ProductID: String(product.productId),
+    Qty: "1",
+    ProductGuid: String(product.productGuid)
+  });
+  return `https://www.jimms.fi/fi/ShoppingCart/AddItem?${params.toString()}`;
 }
 
 function productCategoryLabel(key) {
@@ -374,6 +394,60 @@ function updateTotal() {
     return sum + (item ? parseEuro(item.price) : 0);
   }, 0);
   totalPrice.textContent = formatEuro(total);
+  updateBuildActions();
+}
+
+function updateBuildActions() {
+  const selected = selectedBuildProducts();
+  const ready = productsReadyForJimmsCart();
+  const skipped = selected.length - ready.length;
+
+  addToJimmsCart.disabled = ready.length === 0;
+  addToJimmsCart.textContent = ready.length > 0
+    ? `Add ${ready.length} Part${ready.length === 1 ? "" : "s"} to Jimms Cart`
+    : "Add Build to Jimms Cart";
+  addToJimmsCart.title = skipped > 0
+    ? `${skipped} selected part${skipped === 1 ? " is" : "s are"} missing Jimms cart data and will be skipped.`
+    : "Open the selected build in Jimms cart.";
+}
+
+function openBuildInJimmsCart() {
+  const selected = selectedBuildProducts();
+  const ready = productsReadyForJimmsCart();
+
+  if (ready.length === 0) {
+    window.alert("Select at least one Jimms product before opening the Jimms cart.");
+    return;
+  }
+
+  const helperTab = window.open("about:blank", "_blank");
+  if (!helperTab) {
+    window.alert("Allow pop-ups for this site so the Jimms cart tab can open.");
+    return;
+  }
+
+  const skipped = selected.filter((product) => !(product.productId && product.productGuid));
+  helperTab.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Opening Jimms Cart</title><style>body{font-family:Inter,Arial,sans-serif;padding:24px;line-height:1.5;color:#1f2937}strong{display:block;margin-bottom:8px;font-size:1.05rem}</style></head><body><strong>Adding your build to Jimms cart...</strong><p>This tab will open the selected products and then land on Jimms.fi Shopping Cart.</p></body></html>`);
+  helperTab.document.close();
+
+  if (skipped.length > 0) {
+    window.setTimeout(() => {
+      window.alert(`${skipped.length} selected part${skipped.length === 1 ? "" : "s"} could not be added automatically and were skipped.`);
+    }, 50);
+  }
+
+  const addUrls = ready.map(buildJimmsAddToCartUrl);
+  const startDelayMs = 160;
+  const stepDelayMs = 900;
+  addUrls.forEach((url, index) => {
+    window.setTimeout(() => {
+      if (!helperTab.closed) helperTab.location.replace(url);
+    }, startDelayMs + (index * stepDelayMs));
+  });
+
+  window.setTimeout(() => {
+    if (!helperTab.closed) helperTab.location.replace("https://www.jimms.fi/fi/ShoppingCart");
+  }, startDelayMs + (addUrls.length * stepDelayMs) + 600);
 }
 
 function renderSpecTags(card, product) {
@@ -880,6 +954,8 @@ clearBuild.addEventListener("click", () => {
   });
   renderPartRows();
 });
+
+addToJimmsCart.addEventListener("click", openBuildInJimmsCart);
 
 renderTabs();
 renderPartRows();

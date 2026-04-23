@@ -83,7 +83,9 @@ function product(category, name, sku, price, availability, description) {
     price,
     availability,
     description,
-    sourceUrl: `${JIMMS_BASE}${categories[category]?.url || "/fi/Product/Komponentit"}`
+    sourceUrl: `${JIMMS_BASE}${categories[category]?.url || "/fi/Product/Komponentit"}`,
+    productId: null,
+    productGuid: null
   };
   item.specs = deriveSpecs(item);
   return item;
@@ -683,6 +685,8 @@ function mapApiProduct(apiProduct, category) {
       ? `${apiProduct.ImageBaseSrc.replace(/^\/\//, "https://")}${apiProduct.ImageID}-ig400gg.jpg`
       : "",
     sourceUrl: apiProduct.Uri ? `${JIMMS_BASE}/fi/${apiProduct.Uri}` : `${JIMMS_BASE}${categories[category].url}`,
+    productId: apiProduct.ProductID || null,
+    productGuid: apiProduct.ProductGuid || null,
     productGroupName: apiProduct.ProductGroupName || "",
     productGroupFullName: (apiProduct.ProductGroupFullName || "").replace(/\|\|/g, " / ")
   };

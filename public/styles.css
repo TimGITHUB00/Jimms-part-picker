@@ -78,6 +78,7 @@ select {
 .source-pill,
 .ghost-button,
 .jimms-link,
+.jimms-cart-button,
 .product-actions button {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -157,14 +158,16 @@ h2 {
 }
 
 .ghost-button,
-.jimms-link {
+.jimms-link,
+.jimms-cart-button {
   padding: 10px 14px;
   text-decoration: none;
   cursor: pointer;
 }
 
 .ghost-button:hover,
-.jimms-link:hover {
+.jimms-link:hover,
+.jimms-cart-button:hover {
   border-color: var(--accent);
   color: var(--accent-dark);
 }
@@ -279,6 +282,22 @@ h2 {
 
 .summary strong {
   font-size: 1.55rem;
+}
+
+.build-actions {
+  margin-top: 14px;
+}
+
+.jimms-cart-button {
+  width: 100%;
+  font-weight: 800;
+}
+
+.jimms-cart-button:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: #f4f7fb;
+  border-color: var(--line);
 }
 
 .compatibility {
