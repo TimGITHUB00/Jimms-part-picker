@@ -90,6 +90,7 @@ const accountPasswordInput = document.querySelector("#accountPasswordInput");
 const registerButton = document.querySelector("#registerButton");
 const loginButton = document.querySelector("#loginButton");
 const forgotPasswordButton = document.querySelector("#forgotPasswordButton");
+const testEmailButton = document.querySelector("#testEmailButton");
 const resetForm = document.querySelector("#resetForm");
 const resetCodeInput = document.querySelector("#resetCodeInput");
 const resetPasswordInput = document.querySelector("#resetPasswordInput");
@@ -486,6 +487,23 @@ async function submitPasswordReset() {
   resetCodeInput.value = "";
   setResetMode(false);
   setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
+}
+
+async function sendTestEmail() {
+  const email = (state.auth.user?.email || accountEmailInput.value || "").trim();
+  const response = await fetch("/api/email/test", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders()
+    },
+    body: JSON.stringify({ email })
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "Could not send test email.");
+  }
+  setAuthStatus(data.message || "Test email sent.", "ok");
 }
 
 function parseEuro(price) {
@@ -1638,6 +1656,13 @@ forgotPasswordButton.addEventListener("click", async () => {
     await requestPasswordReset();
   } catch (error) {
     setAuthStatus(error.message || "Could not start password reset.", "warn");
+  }
+});
+testEmailButton.addEventListener("click", async () => {
+  try {
+    await sendTestEmail();
+  } catch (error) {
+    setAuthStatus(error.message || "Could not send test email.", "warn");
   }
 });
 resetPasswordButton.addEventListener("click", async () => {

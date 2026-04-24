@@ -427,6 +427,15 @@ If you did not request this, you can ignore this email.`
   };
 }
 
+function buildTestEmail(targetEmail) {
+  return {
+    subject: "Jimms Part Picker SMTP test",
+    text: `This is a test email from Jimms Part Picker.
+
+If you received this at ${targetEmail}, your SMTP settings are working.`
+  };
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
   return `${salt}:${hash}`;
@@ -2058,6 +2067,46 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         message: "Password updated. You can sign in now."
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/email/test" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const requestedEmail = normalizeEmail(body.email);
+      let targetEmail = requestedEmail;
+
+      const authHeader = req.headers.authorization || "";
+      if (authHeader) {
+        try {
+          const user = await getAuthenticatedUser(req);
+          targetEmail = normalizeEmail(user.email) || targetEmail;
+        } catch (error) {
+          void error;
+        }
+      }
+
+      if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+        throw new Error("Enter a valid email address for the test email.");
+      }
+
+      const testEmail = buildTestEmail(targetEmail);
+      await sendEmailMessage({
+        to: targetEmail,
+        subject: testEmail.subject,
+        text: testEmail.text
+      });
+
+      sendJson(res, 200, {
+        ok: true,
+        message: `Test email sent to ${targetEmail}.`
       });
     } catch (error) {
       sendJson(res, 400, {
