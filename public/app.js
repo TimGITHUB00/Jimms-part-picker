@@ -530,7 +530,7 @@ async function loadBenchmarks() {
   state.benchmarks = {
     status: "loading",
     key,
-    note: "Loading HowManyFPS game FPS estimates...",
+    note: "Loading local game FPS estimates...",
     rows: []
   };
   renderBenchmarks();
@@ -551,9 +551,14 @@ async function loadBenchmarks() {
       key,
       note: data.configured
         ? (data.rows?.length
-          ? `Estimated FPS from ${data.provider || "HowManyFPS"} for matched CPU/GPU hardware.`
-          : data.message || `${data.provider || "HowManyFPS"} returned no FPS rows for the current build.`)
-        : `${data.provider || "HowManyFPS"} API credentials are not configured on this app yet.`,
+          ? [
+            data.sourceNote || `Estimated FPS from ${data.provider || "Local Benchmark Dataset"}.`,
+            data.matches?.cpuName && data.matches?.gpuName
+              ? `Matched to ${data.matches.cpuName} + ${data.matches.gpuName}.`
+              : ""
+          ].filter(Boolean).join(" ")
+          : data.message || `${data.provider || "Local Benchmark Dataset"} returned no FPS rows for the current build.`)
+        : `${data.provider || "Local Benchmark Dataset"} is not available right now.`,
       rows: data.rows || []
     };
   } catch (error) {

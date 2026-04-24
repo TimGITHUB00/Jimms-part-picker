@@ -5,10 +5,9 @@ const { URL } = require("url");
 
 const PORT = process.env.PORT || 4173;
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = path.join(__dirname, "data");
+const BENCHMARK_DATASET_PATH = path.join(DATA_DIR, "local-benchmarks.json");
 const JIMMS_BASE = "https://www.jimms.fi";
-const HOWMANYFPS_API_BASE = process.env.HOWMANYFPS_API_BASE || "https://api.howmanyfps.com";
-const HOWMANYFPS_API_KEY = process.env.HOWMANYFPS_API_KEY || "";
-const HOWMANYFPS_AUTH_HEADER = process.env.HOWMANYFPS_AUTH_HEADER || "";
 
 const categories = {
   cpu: { label: "CPU", group: "000-00R", url: "/fi/Product/List/000-00R" },
@@ -25,19 +24,10 @@ const categories = {
 const cache = new Map();
 const detailCache = new Map();
 const cartLinkCache = new Map();
-const howManyFpsCache = new Map();
 const cacheMs = 1000 * 60 * 12;
 const pageSize = 100;
 const maxPagesPerCategory = 30;
-const popularBenchmarkGames = [
-  "Counter-Strike 2",
-  "Cyberpunk 2077",
-  "Fortnite",
-  "Valorant",
-  "Marvel Rivals",
-  "GTA V",
-  "Apex Legends"
-];
+let localBenchmarkDatasetCache = null;
 
 const fallbackProducts = {
   cpu: [
@@ -190,40 +180,11 @@ function textFromHtml(html) {
   return stripHtml(html).join("\n");
 }
 
-function hasHowManyFpsConfig() {
-  return Boolean(HOWMANYFPS_API_KEY || HOWMANYFPS_AUTH_HEADER);
-}
-
-async function howManyFpsFetch(pathname, options = {}) {
-  if (!hasHowManyFpsConfig()) {
-    throw new Error("HowManyFPS API is not configured.");
-  }
-
-  const requestUrl = new URL(pathname, HOWMANYFPS_API_BASE).toString();
-  const headers = {
-    accept: "application/json",
-    ...(options.headers || {})
-  };
-
-  if (HOWMANYFPS_API_KEY) {
-    headers["x-api-key"] = HOWMANYFPS_API_KEY;
-    headers.authorization = headers.authorization || `Bearer ${HOWMANYFPS_API_KEY}`;
-  }
-
-  if (HOWMANYFPS_AUTH_HEADER) {
-    headers.authorization = HOWMANYFPS_AUTH_HEADER;
-  }
-
-  const response = await fetch(requestUrl, {
-    ...options,
-    headers
-  });
-
-  if (!response.ok) {
-    throw new Error(`HowManyFPS returned ${response.status}`);
-  }
-
-  return response.json();
+function loadLocalBenchmarkDataset() {
+  if (localBenchmarkDatasetCache) return localBenchmarkDatasetCache;
+  const raw = fs.readFileSync(BENCHMARK_DATASET_PATH, "utf8");
+  localBenchmarkDatasetCache = JSON.parse(raw);
+  return localBenchmarkDatasetCache;
 }
 
 function normalizeBenchmarkText(value) {
@@ -722,18 +683,6 @@ function estimateGpuWatts(text) {
   return match ? match[1] : 0;
 }
 
-function getHowManyFpsCache(key) {
-  const cached = howManyFpsCache.get(key);
-  if (cached && Date.now() - cached.createdAt < cacheMs) {
-    return cached.value;
-  }
-  return null;
-}
-
-function setHowManyFpsCache(key, value) {
-  howManyFpsCache.set(key, { createdAt: Date.now(), value });
-}
-
 function inferMemoryChannels(memory) {
   const source = `${memory?.name || ""} ${memory?.description || ""}`;
   const modules = Number(firstMatch(source, /\((\d+)\s*x\s*\d+\s*GB\)/i)) || 2;
@@ -827,82 +776,153 @@ function deriveSpecs(item) {
   return specs;
 }
 
-const benchmarkScenarios = [
-  { resolution: "1080p", setting: "Medium", preset: "Medium" },
-  { resolution: "1080p", setting: "Ultra", preset: "Ultra" },
-  { resolution: "1440p", setting: "Ultra", preset: "Ultra" },
-  { resolution: "4K", setting: "Ultra", preset: "Ultra" }
-];
+function benchmarkWords(value) {
+  return normalizeBenchmarkText(value)
+    .split(" ")
+    .filter((word) => word && !["amd", "intel", "nvidia", "geforce", "radeon", "graphics", "card", "processor"].includes(word));
+}
 
-async function fetchHowManyFpsEstimate(cpu, gpu, game, scenario) {
-  const cacheKey = `hmf:${normalizeBenchmarkText(cpu)}|${normalizeBenchmarkText(gpu)}|${normalizeBenchmarkText(game)}|${scenario.resolution}|${scenario.preset}`;
-  const cached = getHowManyFpsCache(cacheKey);
-  if (cached) return cached;
+function scoreBenchmarkHardwareMatch(query, candidate) {
+  const normalizedQuery = normalizeBenchmarkText(query);
+  const normalizedCandidate = normalizeBenchmarkText(candidate);
+  if (!normalizedQuery || !normalizedCandidate) return 0;
+  if (normalizedQuery === normalizedCandidate) return 1000;
 
-  const data = await howManyFpsFetch("/v1/fps", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      cpu,
-      gpu,
-      game,
-      resolution: scenario.resolution,
-      preset: scenario.preset
-    })
+  let score = 0;
+  if (normalizedCandidate.includes(normalizedQuery) || normalizedQuery.includes(normalizedCandidate)) {
+    score += 250;
+  }
+
+  const queryWords = benchmarkWords(query);
+  const candidateWords = benchmarkWords(candidate);
+  const querySet = new Set(queryWords);
+  const candidateSet = new Set(candidateWords);
+  let shared = 0;
+  querySet.forEach((word) => {
+    if (candidateSet.has(word)) shared += 1;
   });
+  score += shared * 35;
 
-  setHowManyFpsCache(cacheKey, data);
-  return data;
+  const querySeries = firstMatch(normalizedQuery, /\b(\d{4,5}x?)\b/);
+  const candidateSeries = firstMatch(normalizedCandidate, /\b(\d{4,5}x?)\b/);
+  if (querySeries && candidateSeries && querySeries === candidateSeries) score += 220;
+
+  const queryPrefix = firstMatch(normalizedQuery, /\b(ryzen|core|rtx|gtx|rx|arc)\b/);
+  const candidatePrefix = firstMatch(normalizedCandidate, /\b(ryzen|core|rtx|gtx|rx|arc)\b/);
+  if (queryPrefix && candidatePrefix && queryPrefix === candidatePrefix) score += 80;
+
+  if (/x3d/.test(normalizedQuery) && /x3d/.test(normalizedCandidate)) score += 50;
+  if (/\bti\b/.test(normalizedQuery) && /\bti\b/.test(normalizedCandidate)) score += 30;
+  if (/super/.test(normalizedQuery) && /super/.test(normalizedCandidate)) score += 20;
+  if (/xt/.test(normalizedQuery) && /xt/.test(normalizedCandidate)) score += 20;
+
+  return score;
+}
+
+function findBenchmarkHardwareEntry(name, entries) {
+  const query = String(name || "").trim();
+  if (!query) return null;
+
+  let best = null;
+  let bestScore = 0;
+  for (const entry of entries || []) {
+    const score = scoreBenchmarkHardwareMatch(query, entry.name);
+    if (score > bestScore) {
+      best = entry;
+      bestScore = score;
+    }
+  }
+
+  if (!best || bestScore < 90) return null;
+  return { ...best, matchScore: bestScore };
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getScenarioBaseline(game, resolution, setting) {
+  return (game.baselines || []).find((baseline) => baseline.resolution === resolution && baseline.setting === setting) || null;
+}
+
+function estimateMemoryFactor(parts, dataset) {
+  const reference = dataset.referenceHardware || {};
+  const actualChannels = inferMemoryChannels(parts.memory);
+  const actualSpeed = inferMemoryFrequency(parts.memory);
+  const referenceChannels = reference.memoryChannels || 4;
+  const referenceSpeed = reference.memorySpeed || 6000;
+  const channelFactor = clamp(actualChannels / referenceChannels, 0.92, 1.04);
+  const speedFactor = clamp(actualSpeed / referenceSpeed, 0.94, 1.04);
+  return clamp(channelFactor * speedFactor, 0.91, 1.06);
+}
+
+function estimateBenchmarkRow({ game, baseline, cpuFactor, gpuFactor, memoryFactor }) {
+  const cpuSensitivity = Number(game.cpuSensitivity || 0.35);
+  const gpuSensitivity = 1 - cpuSensitivity;
+  const blendedFactor = Math.pow(cpuFactor, cpuSensitivity) * Math.pow(gpuFactor, gpuSensitivity) * memoryFactor;
+  const fps = clamp(baseline.fps * blendedFactor, 18, 900);
+  const lowFactor = clamp(0.58 + (cpuSensitivity * 0.22) + ((memoryFactor - 1) * 0.2), 0.55, 0.86);
+  const min1Fps = clamp(fps * lowFactor, 14, fps * 0.95);
+
+  return {
+    game: game.name,
+    resolution: baseline.resolution,
+    setting: baseline.setting,
+    fps,
+    min1Fps
+  };
 }
 
 async function estimateGameBenchmarks(parts) {
-  if (!hasHowManyFpsConfig()) {
-    return {
-      configured: false,
-      provider: "HowManyFPS",
-      message: "HowManyFPS API credentials are not configured."
-    };
-  }
+  const dataset = loadLocalBenchmarkDataset();
 
   const cpu = inferBenchmarkCpuName(parts.cpu?.name || parts.cpu?.displayName || "");
   const gpu = inferBenchmarkGpuName(parts.gpu?.name || parts.gpu?.displayName || "");
+  const cpuMatch = findBenchmarkHardwareEntry(cpu, dataset.cpus);
+  const gpuMatch = findBenchmarkHardwareEntry(gpu, dataset.gpus);
 
-  if (!cpu || !gpu) {
+  if (!cpu || !gpu || !cpuMatch || !gpuMatch) {
     return {
       configured: true,
-      provider: "HowManyFPS",
-      message: "HowManyFPS could not infer a CPU or GPU name from the selected build."
+      provider: dataset.metadata?.provider || "Local Benchmark Dataset",
+      rows: [],
+      message: "The local benchmark dataset could not find a close CPU or GPU match for this build yet."
     };
   }
 
+  const reference = dataset.referenceHardware || {};
+  const cpuFactor = clamp((cpuMatch.score || 1) / (reference.cpuScore || 100), 0.45, 2.6);
+  const gpuFactor = clamp((gpuMatch.score || 1) / (reference.gpuScore || 100), 0.28, 3.4);
+  const memoryFactor = estimateMemoryFactor(parts, dataset);
   const rows = [];
-  for (const game of popularBenchmarkGames) {
-    for (const scenario of benchmarkScenarios) {
-      try {
-        const result = await fetchHowManyFpsEstimate(cpu, gpu, game, scenario);
-        if (typeof result.avgFps === "number") {
-          rows.push({
-            game,
-            resolution: scenario.resolution,
-            setting: scenario.setting,
-            fps: result.avgFps,
-            min1Fps: typeof result.min1Fps === "number" ? result.min1Fps : null
-          });
-        }
-      } catch (error) {
-        continue;
+  for (const game of dataset.games || []) {
+    for (const baseline of game.baselines || []) {
+      if (typeof baseline.fps === "number") {
+        rows.push(estimateBenchmarkRow({
+          game,
+          baseline,
+          cpuFactor,
+          gpuFactor,
+          memoryFactor
+        }));
       }
     }
   }
 
   return {
     configured: true,
-    provider: "HowManyFPS",
-    matches: { cpuName: cpu, gpuName: gpu },
+    provider: dataset.metadata?.provider || "Local Benchmark Dataset",
+    sourceNote: dataset.metadata?.description || "",
+    matches: {
+      requestedCpuName: cpu,
+      requestedGpuName: gpu,
+      cpuName: cpuMatch.name,
+      gpuName: gpuMatch.name
+    },
     rows,
-    message: rows.length > 0 ? "" : "HowManyFPS returned no FPS rows for the selected CPU/GPU build."
+    message: rows.length > 0
+      ? ""
+      : "The local benchmark dataset has no game rows available right now."
   };
 }
 
@@ -1175,7 +1195,8 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 200, {
-        configured: hasHowManyFpsConfig(),
+        configured: true,
+        provider: "Local Benchmark Dataset",
         rows: [],
         message: error.message
       });
