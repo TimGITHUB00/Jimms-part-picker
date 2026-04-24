@@ -39,7 +39,6 @@ const maxPagesPerCategory = 30;
 let localBenchmarkDatasetCache = null;
 let gpuMarketDatasetCache = null;
 let googleJwksCache = null;
-let appConfigCache = null;
 
 const fallbackProducts = {
   cpu: [
@@ -289,7 +288,6 @@ function loadUserBuildStore() {
 }
 
 function loadAppConfig() {
-  if (appConfigCache) return appConfigCache;
   ensureDataFile(APP_CONFIG_PATH, {
     googleClientId: "",
     smtpHost: "",
@@ -300,8 +298,7 @@ function loadAppConfig() {
     smtpFrom: "",
     smtpFromName: "Jimms Part Picker"
   });
-  appConfigCache = JSON.parse(fs.readFileSync(APP_CONFIG_PATH, "utf8"));
-  return appConfigCache;
+  return JSON.parse(fs.readFileSync(APP_CONFIG_PATH, "utf8"));
 }
 
 function getGoogleClientId() {
@@ -319,7 +316,7 @@ function saveAppConfig(config) {
     smtpFrom: "",
     smtpFromName: "Jimms Part Picker"
   });
-  appConfigCache = {
+  const nextConfig = {
     googleClientId: String(config.googleClientId || "").trim(),
     smtpHost: String(config.smtpHost || "").trim(),
     smtpPort: Number(config.smtpPort) || 465,
@@ -329,7 +326,7 @@ function saveAppConfig(config) {
     smtpFrom: String(config.smtpFrom || "").trim(),
     smtpFromName: String(config.smtpFromName || "Jimms Part Picker").trim() || "Jimms Part Picker"
   };
-  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(appConfigCache, null, 2), "utf8");
+  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(nextConfig, null, 2), "utf8");
 }
 
 function saveUserBuildStore(store) {
