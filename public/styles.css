@@ -162,26 +162,13 @@ select {
   gap: 8px;
 }
 
-.auth-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+.auth-page-layout {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 32px 16px 48px;
 }
 
-.auth-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(8, 17, 29, 0.52);
-  backdrop-filter: blur(8px);
-}
-
-.auth-dialog {
-  position: relative;
-  z-index: 1;
-  width: min(520px, 100%);
+.auth-page-shell {
   display: grid;
   gap: 16px;
   padding: 20px;
@@ -191,25 +178,32 @@ select {
   box-shadow: var(--shadow);
 }
 
-.auth-dialog-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.auth-dialog-head p {
-  margin-top: 4px;
+.auth-page-shell-head p {
+  margin-top: 6px;
   color: var(--muted);
   line-height: 1.4;
 }
 
-.auth-page {
+.auth-page-status {
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.auth-page-status[data-tone="ok"] {
+  color: var(--accent-dark);
+}
+
+.auth-page-status[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.auth-page-form {
   display: grid;
   gap: 12px;
 }
 
-.auth-page input {
+.auth-page-form input {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);

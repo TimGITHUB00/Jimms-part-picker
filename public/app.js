@@ -79,56 +79,12 @@ const authSummary = document.querySelector("#authSummary");
 const authInlineStatus = document.querySelector("#authInlineStatus");
 const authLaunchers = document.querySelector("#authLaunchers");
 const signOutButton = document.querySelector("#signOutButton");
-const authScreen = document.querySelector("#authScreen");
-const authBackdrop = document.querySelector("#authBackdrop");
-const closeAuthScreenButton = document.querySelector("#closeAuthScreenButton");
-const authPageTitle = document.querySelector("#authPageTitle");
-const authPageMeta = document.querySelector("#authPageMeta");
 const savedBuildsStatus = document.querySelector("#savedBuildsStatus");
 const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
 const newBuildButton = document.querySelector("#newBuildButton");
 const savedBuildsList = document.querySelector("#savedBuildsList");
-const registerButton = document.querySelector("#registerButton");
-const loginButton = document.querySelector("#loginButton");
-const forgotPasswordButton = document.querySelector("#forgotPasswordButton");
 const testEmailButton = document.querySelector("#testEmailButton");
-const registerPage = document.querySelector("#registerPage");
-const loginPage = document.querySelector("#loginPage");
-const forgotPage = document.querySelector("#forgotPage");
-const registerUsernameInput = document.querySelector("#registerUsernameInput");
-const registerEmailInput = document.querySelector("#registerEmailInput");
-const registerPasswordInput = document.querySelector("#registerPasswordInput");
-const registerConfirmPasswordInput = document.querySelector("#registerConfirmPasswordInput");
-const loginEmailInput = document.querySelector("#loginEmailInput");
-const loginPasswordInput = document.querySelector("#loginPasswordInput");
-const forgotEmailInput = document.querySelector("#forgotEmailInput");
-const switchToLoginButton = document.querySelector("#switchToLoginButton");
-const switchToForgotButton = document.querySelector("#switchToForgotButton");
-const requestResetButton = document.querySelector("#requestResetButton");
-const sendTestEmailButton = document.querySelector("#sendTestEmailButton");
-const resetCodeInput = document.querySelector("#resetCodeInput");
-const resetPasswordInput = document.querySelector("#resetPasswordInput");
-const resetConfirmPasswordInput = document.querySelector("#resetConfirmPasswordInput");
-const resetPasswordButton = document.querySelector("#resetPasswordButton");
-
-const authPageConfig = {
-  register: {
-    title: "Create Account",
-    meta: "Set up a username, email, and password for saved builds.",
-    page: registerPage
-  },
-  login: {
-    title: "Sign In",
-    meta: "Sign in to save and load named builds from your account.",
-    page: loginPage
-  },
-  forgot: {
-    title: "Forgot Password",
-    meta: "Send a reset email, then enter the code and your new password here.",
-    page: forgotPage
-  }
-};
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -335,34 +291,6 @@ function setAuthStatus(message = "", tone = "") {
   }
 }
 
-function syncAuthEmails(email = "") {
-  if (email && registerEmailInput.value.trim() !== email) registerEmailInput.value = email;
-  if (email && loginEmailInput.value.trim() !== email) loginEmailInput.value = email;
-  if (email && forgotEmailInput.value.trim() !== email) forgotEmailInput.value = email;
-}
-
-function openAuthView(mode) {
-  const config = authPageConfig[mode] || authPageConfig.login;
-  Object.values(authPageConfig).forEach((entry) => {
-    entry.page.hidden = entry !== config;
-  });
-  authPageTitle.textContent = config.title;
-  authPageMeta.textContent = config.meta;
-  authScreen.hidden = false;
-  document.body.style.overflow = "hidden";
-}
-
-function closeAuthView() {
-  authScreen.hidden = true;
-  document.body.style.overflow = "";
-}
-
-function clearResetInputs() {
-  resetCodeInput.value = "";
-  resetPasswordInput.value = "";
-  resetConfirmPasswordInput.value = "";
-}
-
 async function fetchSavedBuilds() {
   if (!state.auth.token) {
     state.auth.user = null;
@@ -448,7 +376,6 @@ function renderAuthState() {
     signOutButton.hidden = false;
     authLaunchers.hidden = true;
     testEmailButton.hidden = false;
-    clearResetInputs();
     return;
   }
 
@@ -459,105 +386,14 @@ function renderAuthState() {
 }
 
 async function loadAuthConfig() {
-  clearResetInputs();
   setAuthStatus("");
   renderAuthState();
   renderSavedBuilds();
   await fetchSavedBuilds();
 }
 
-async function submitLocalAuth(mode) {
-  const email = mode === "register" ? registerEmailInput.value.trim() : loginEmailInput.value.trim();
-  const password = mode === "register" ? registerPasswordInput.value : loginPasswordInput.value;
-  if (mode === "register" && password !== registerConfirmPasswordInput.value) {
-    throw new Error("Passwords do not match.");
-  }
-  const payload = {
-    email,
-    password
-  };
-  if (mode === "register") {
-    payload.username = registerUsernameInput.value.trim();
-  }
-
-  const response = await fetch(`/api/auth/local/${mode}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Authentication failed.");
-  }
-
-  state.auth.token = data.token || "";
-  state.auth.user = data.user || null;
-  window.localStorage.setItem(AUTH_TOKEN_KEY, state.auth.token);
-  registerPasswordInput.value = "";
-  registerConfirmPasswordInput.value = "";
-  loginPasswordInput.value = "";
-  clearResetInputs();
-  syncAuthEmails(email);
-  setAuthStatus(data.message || (mode === "register" ? "Account created." : "Signed in."), "ok");
-  renderAuthState();
-  await fetchSavedBuilds();
-  closeAuthView();
-}
-
-async function requestPasswordReset() {
-  const email = forgotEmailInput.value.trim();
-  const response = await fetch("/api/auth/local/forgot-password", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ email })
-  });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Could not start password reset.");
-  }
-
-  syncAuthEmails(email);
-  setAuthStatus(data.message || "Reset message sent.", "ok");
-}
-
-async function submitPasswordReset() {
-  const email = forgotEmailInput.value.trim();
-  const code = resetCodeInput.value.trim();
-  const password = resetPasswordInput.value;
-  if (password !== resetConfirmPasswordInput.value) {
-    throw new Error("Passwords do not match.");
-  }
-  const response = await fetch("/api/auth/local/reset-password", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      email,
-      code,
-      password
-    })
-  });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Could not reset password.");
-  }
-
-  loginPasswordInput.value = "";
-  resetPasswordInput.value = "";
-  resetConfirmPasswordInput.value = "";
-  resetCodeInput.value = "";
-  syncAuthEmails(email);
-  setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
-  openAuthView("login");
-}
-
 async function sendTestEmail() {
-  const email = (state.auth.user?.email || forgotEmailInput.value || loginEmailInput.value || registerEmailInput.value || "").trim();
+  const email = (state.auth.user?.email || "").trim();
   const response = await fetch("/api/email/test", {
     method: "POST",
     headers: {
@@ -1704,67 +1540,7 @@ newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
-registerButton.addEventListener("click", async () => {
-  syncAuthEmails(state.auth.user?.email || "");
-  openAuthView("register");
-});
-loginButton.addEventListener("click", async () => {
-  syncAuthEmails(state.auth.user?.email || "");
-  openAuthView("login");
-});
-forgotPasswordButton.addEventListener("click", async () => {
-  syncAuthEmails(state.auth.user?.email || "");
-  openAuthView("forgot");
-});
 testEmailButton.addEventListener("click", async () => {
-  try {
-    await sendTestEmail();
-  } catch (error) {
-    setAuthStatus(error.message || "Could not send test email.", "warn");
-  }
-});
-closeAuthScreenButton.addEventListener("click", closeAuthView);
-authBackdrop.addEventListener("click", closeAuthView);
-switchToLoginButton.addEventListener("click", () => {
-  syncAuthEmails(registerEmailInput.value.trim());
-  openAuthView("login");
-});
-switchToForgotButton.addEventListener("click", () => {
-  syncAuthEmails(loginEmailInput.value.trim());
-  openAuthView("forgot");
-});
-registerPage.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    await submitLocalAuth("register");
-  } catch (error) {
-    setAuthStatus(error.message || "Could not create that account.", "warn");
-  }
-});
-loginPage.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    await submitLocalAuth("login");
-  } catch (error) {
-    setAuthStatus(error.message || "Could not sign in.", "warn");
-  }
-});
-requestResetButton.addEventListener("click", async () => {
-  try {
-    await requestPasswordReset();
-  } catch (error) {
-    setAuthStatus(error.message || "Could not start password reset.", "warn");
-  }
-});
-forgotPage.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    await submitPasswordReset();
-  } catch (error) {
-    setAuthStatus(error.message || "Could not reset password.", "warn");
-  }
-});
-sendTestEmailButton.addEventListener("click", async () => {
   try {
     await sendTestEmail();
   } catch (error) {
@@ -1781,8 +1557,6 @@ signOutButton.addEventListener("click", () => {
     method: "POST",
     headers
   }).catch(() => {});
-  clearResetInputs();
-  closeAuthView();
   setAuthStatus("Signed out.");
   renderAuthState();
   renderSavedBuilds();

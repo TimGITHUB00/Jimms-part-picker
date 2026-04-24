@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Register - Jimms Part Picker</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body data-auth-page="register">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Jimms Part Picker home">
+        <span class="brand-mark">JP</span>
+        <span>
+          <strong>Jimms Part Picker</strong>
+          <small>Finnish PC builds, Jimms.fi prices</small>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <a class="ghost-button" href="/">Back to Builder</a>
+      </div>
+    </header>
+
+    <main class="auth-page-layout">
+      <section class="auth-page-shell">
+        <div class="auth-page-shell-head">
+          <h1>Create Account</h1>
+          <p>Set up a username, email, and password for saved builds.</p>
+        </div>
+        <div class="auth-page-status" id="authPageStatus" aria-live="polite"></div>
+        <form class="auth-page-form" id="registerForm">
+          <label class="build-name-field">
+            <span>Username</span>
+            <input id="registerUsernameInput" type="text" maxlength="80" placeholder="Username" required>
+          </label>
+          <label class="build-name-field">
+            <span>Email</span>
+            <input id="registerEmailInput" type="email" autocomplete="username" placeholder="Email" required>
+          </label>
+          <label class="build-name-field">
+            <span>Password</span>
+            <input id="registerPasswordInput" type="password" autocomplete="new-password" placeholder="Password" required>
+          </label>
+          <label class="build-name-field">
+            <span>Confirm password</span>
+            <input id="registerConfirmPasswordInput" type="password" autocomplete="new-password" placeholder="Confirm password" required>
+          </label>
+          <div class="auth-page-actions">
+            <button class="jimms-cart-button" type="submit">Create account</button>
+            <a class="ghost-button" href="/login.html">Already have an account?</a>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/auth-pages.js" defer></script>
+  </body>
+</html>

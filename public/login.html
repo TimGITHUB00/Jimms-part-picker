@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign In - Jimms Part Picker</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body data-auth-page="login">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Jimms Part Picker home">
+        <span class="brand-mark">JP</span>
+        <span>
+          <strong>Jimms Part Picker</strong>
+          <small>Finnish PC builds, Jimms.fi prices</small>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <a class="ghost-button" href="/">Back to Builder</a>
+      </div>
+    </header>
+
+    <main class="auth-page-layout">
+      <section class="auth-page-shell">
+        <div class="auth-page-shell-head">
+          <h1>Sign In</h1>
+          <p>Sign in to save and load named builds from your account.</p>
+        </div>
+        <div class="auth-page-status" id="authPageStatus" aria-live="polite"></div>
+        <form class="auth-page-form" id="loginForm">
+          <label class="build-name-field">
+            <span>Email</span>
+            <input id="loginEmailInput" type="email" autocomplete="username" placeholder="Email" required>
+          </label>
+          <label class="build-name-field">
+            <span>Password</span>
+            <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="Password" required>
+          </label>
+          <div class="auth-page-actions">
+            <button class="jimms-cart-button" type="submit">Sign in</button>
+            <a class="ghost-button" href="/forgot-password.html">Forgot password?</a>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/auth-pages.js" defer></script>
+  </body>
+</html>
