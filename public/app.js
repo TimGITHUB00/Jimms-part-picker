@@ -84,7 +84,6 @@ const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
 const newBuildButton = document.querySelector("#newBuildButton");
 const savedBuildsList = document.querySelector("#savedBuildsList");
-const testEmailButton = document.querySelector("#testEmailButton");
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -375,14 +374,12 @@ function renderAuthState() {
     authSummary.textContent = `${state.auth.user.username || state.auth.user.name} (${state.auth.user.email})`;
     signOutButton.hidden = false;
     authLaunchers.hidden = true;
-    testEmailButton.hidden = false;
     return;
   }
 
   authSummary.textContent = "Guest mode (local saves still work)";
   signOutButton.hidden = true;
   authLaunchers.hidden = false;
-  testEmailButton.hidden = true;
 }
 
 async function loadAuthConfig() {
@@ -390,23 +387,6 @@ async function loadAuthConfig() {
   renderAuthState();
   renderSavedBuilds();
   await fetchSavedBuilds();
-}
-
-async function sendTestEmail() {
-  const email = (state.auth.user?.email || "").trim();
-  const response = await fetch("/api/email/test", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders()
-    },
-    body: JSON.stringify({ email })
-  });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Could not send test email.");
-  }
-  setAuthStatus(data.message || "Test email sent.", "ok");
 }
 
 function parseEuro(price) {
@@ -1539,13 +1519,6 @@ saveBuildButton.addEventListener("click", async () => {
 newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
-});
-testEmailButton.addEventListener("click", async () => {
-  try {
-    await sendTestEmail();
-  } catch (error) {
-    setAuthStatus(error.message || "Could not send test email.", "warn");
-  }
 });
 signOutButton.addEventListener("click", () => {
   const headers = authHeaders();

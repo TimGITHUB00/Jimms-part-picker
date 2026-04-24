@@ -104,7 +104,6 @@ function setupForgotPage() {
   const passwordInput = document.querySelector("#resetPasswordInput");
   const confirmInput = document.querySelector("#resetConfirmPasswordInput");
   const requestResetButton = document.querySelector("#requestResetButton");
-  const sendTestEmailButton = document.querySelector("#sendTestEmailButton");
 
   requestResetButton?.addEventListener("click", async () => {
     try {
@@ -114,17 +113,6 @@ function setupForgotPage() {
       setStatus(data.message || "Reset email sent.", "ok");
     } catch (error) {
       setStatus(error.message || "Could not start password reset.", "warn");
-    }
-  });
-
-  sendTestEmailButton?.addEventListener("click", async () => {
-    try {
-      const data = await postJson("/api/email/test", {
-        email: emailInput.value.trim()
-      });
-      setStatus(data.message || "Test email sent.", "ok");
-    } catch (error) {
-      setStatus(error.message || "Could not send test email.", "warn");
     }
   });
 
