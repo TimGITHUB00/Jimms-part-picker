@@ -305,6 +305,77 @@ h2 {
   padding: 16px;
 }
 
+.benchmarks {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.benchmarks-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.benchmarks-head span {
+  min-width: 92px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #edf4ff;
+  color: #1e4f99;
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.benchmarks-note {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.benchmark-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.benchmark-game {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.benchmark-game h3 {
+  font-size: 1rem;
+}
+
+.benchmark-grid {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.benchmark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.92rem;
+}
+
+.benchmark-row span {
+  color: var(--muted);
+}
+
+.benchmark-row strong {
+  white-space: nowrap;
+}
+
 .compatibility-head {
   display: flex;
   align-items: center;

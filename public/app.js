@@ -27,7 +27,13 @@ const state = {
   activeProductCategory: "cpu",
   selected: Object.fromEntries(categories.map(([key]) => [key, null])),
   products: [],
-  displayedProducts: []
+  displayedProducts: [],
+  benchmarks: {
+    status: "idle",
+    key: "",
+    note: "Complete the build to load benchmark estimates.",
+    rows: []
+  }
 };
 
 const partList = document.querySelector("#partList");
@@ -53,6 +59,9 @@ const compatibilityPanel = document.querySelector("#compatibilityPanel");
 const compatibilityBadge = document.querySelector("#compatibilityBadge");
 const compatibilityTitle = document.querySelector("#compatibilityTitle");
 const compatibilityList = document.querySelector("#compatibilityList");
+const benchmarkPanel = document.querySelector("#benchmarkPanel");
+const benchmarkNote = document.querySelector("#benchmarkNote");
+const benchmarkList = document.querySelector("#benchmarkList");
 
 function parseEuro(price) {
   const normalized = String(price)
@@ -77,6 +86,14 @@ function selectedBuildProducts() {
   return categories
     .map(([key]) => state.selected[key])
     .filter(Boolean);
+}
+
+function hasCompleteBuild() {
+  return categories.every(([key]) => Boolean(state.selected[key]));
+}
+
+function benchmarkBuildKey() {
+  return categories.map(([key]) => state.selected[key]?.id || "").join("|");
 }
 
 function productsReadyForJimmsCart() {
@@ -218,6 +235,7 @@ function renderPartRows() {
   });
   updateTotal();
   updateCompatibility();
+  loadBenchmarks();
 }
 
 function renderProducts() {
@@ -438,6 +456,114 @@ function updateBuildActions() {
   addToJimmsCart.title = skipped > 0
     ? `${skipped} selected part${skipped === 1 ? "" : "s"} need an extra Jimms page lookup before they can be added: ${formatSkippedCartProducts(skippedProducts)}.`
     : "Open the selected build in Jimms cart.";
+}
+
+function renderBenchmarks() {
+  benchmarkList.innerHTML = "";
+
+  if (!hasCompleteBuild()) {
+    benchmarkPanel.hidden = true;
+    benchmarkNote.textContent = "Complete the build to load benchmark estimates.";
+    return;
+  }
+
+  benchmarkPanel.hidden = false;
+  benchmarkNote.textContent = state.benchmarks.note;
+
+  if (!state.benchmarks.rows.length) {
+    return;
+  }
+
+  const grouped = new Map();
+  state.benchmarks.rows.forEach((row) => {
+    if (!grouped.has(row.game)) grouped.set(row.game, []);
+    grouped.get(row.game).push(row);
+  });
+
+  grouped.forEach((rows, game) => {
+    const card = document.createElement("article");
+    card.className = "benchmark-game";
+    const title = document.createElement("h3");
+    title.textContent = game;
+    card.append(title);
+
+    const grid = document.createElement("div");
+    grid.className = "benchmark-grid";
+    rows
+      .sort((a, b) => `${a.resolution} ${a.setting}`.localeCompare(`${b.resolution} ${b.setting}`))
+      .forEach((row) => {
+        const item = document.createElement("div");
+        item.className = "benchmark-row";
+        const meta = document.createElement("span");
+        meta.textContent = `${row.resolution} ${row.setting}`;
+        const fps = document.createElement("strong");
+        fps.textContent = `${Math.round(row.fps)} FPS`;
+        item.append(meta, fps);
+        grid.append(item);
+      });
+
+    card.append(grid);
+    benchmarkList.append(card);
+  });
+}
+
+async function loadBenchmarks() {
+  if (!hasCompleteBuild()) {
+    state.benchmarks = {
+      status: "idle",
+      key: "",
+      note: "Complete the build to load benchmark estimates.",
+      rows: []
+    };
+    renderBenchmarks();
+    return;
+  }
+
+  const key = benchmarkBuildKey();
+  if (state.benchmarks.key === key && state.benchmarks.status === "ready") {
+    renderBenchmarks();
+    return;
+  }
+
+  state.benchmarks = {
+    status: "loading",
+    key,
+    note: "Loading UL Benchmarks FPS estimates...",
+    rows: []
+  };
+  renderBenchmarks();
+
+  try {
+    const response = await fetch("/api/ul-benchmarks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ parts: state.selected })
+    });
+    const data = await response.json();
+    if (benchmarkBuildKey() !== key) return;
+
+    state.benchmarks = {
+      status: "ready",
+      key,
+      note: data.configured
+        ? (data.rows?.length
+          ? `Estimated FPS from UL Benchmarks for matched CPU/GPU hardware.`
+          : data.message || "UL Benchmarks returned no FPS rows for the current build.")
+        : "UL Benchmarks API credentials are not configured on this app yet.",
+      rows: data.rows || []
+    };
+  } catch (error) {
+    state.benchmarks = {
+      status: "error",
+      key,
+      note: "Could not load UL Benchmarks estimates right now.",
+      rows: []
+    };
+  }
+
+  renderBenchmarks();
 }
 
 async function openBuildInJimmsCart() {
