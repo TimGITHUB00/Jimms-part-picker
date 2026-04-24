@@ -17,7 +17,24 @@
       </a>
       <div class="topbar-actions">
         <div class="auth-panel">
-          <div class="auth-summary" id="authSummary">Guest mode</div>
+          <div class="auth-panel-copy">
+            <div class="auth-summary" id="authSummary">Guest mode</div>
+            <div class="auth-inline-status" id="authInlineStatus" aria-live="polite"></div>
+          </div>
+          <div class="auth-form" id="authForm">
+            <input id="accountNameInput" type="text" maxlength="80" placeholder="Name">
+            <input id="accountEmailInput" type="email" autocomplete="username" placeholder="Email">
+            <input id="accountPasswordInput" type="password" autocomplete="current-password" placeholder="Password">
+            <button class="ghost-button" id="registerButton" type="button">Register</button>
+            <button class="ghost-button" id="loginButton" type="button">Sign in</button>
+            <button class="ghost-button" id="forgotPasswordButton" type="button">Forgot password?</button>
+          </div>
+          <div class="reset-form" id="resetForm" hidden>
+            <input id="resetCodeInput" type="text" maxlength="16" placeholder="Reset code">
+            <input id="resetPasswordInput" type="password" autocomplete="new-password" placeholder="New password">
+            <button class="ghost-button" id="resetPasswordButton" type="button">Reset password</button>
+            <button class="ghost-button" id="cancelResetButton" type="button">Cancel</button>
+          </div>
           <button class="ghost-button" id="signOutButton" type="button" hidden>Sign out</button>
         </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" title="Toggle dark mode">Dark mode</button>
@@ -43,23 +60,15 @@
             </div>
             <button class="ghost-button" id="newBuildButton" type="button">New</button>
           </div>
-          <div class="account-setup" id="accountSetup">
-            <label class="build-name-field">
-              <span>Name</span>
-              <input id="accountNameInput" type="text" maxlength="80" placeholder="Tim Builder">
-            </label>
-            <label class="build-name-field">
-              <span>Email</span>
-              <input id="accountEmailInput" type="email" autocomplete="username" placeholder="name@example.com">
-            </label>
-            <label class="build-name-field">
-              <span>Password</span>
-              <input id="accountPasswordInput" type="password" autocomplete="current-password" placeholder="At least 6 characters">
-            </label>
-            <div class="saved-builds-actions">
-              <button class="ghost-button" id="registerButton" type="button">Create Account</button>
-              <button class="ghost-button" id="loginButton" type="button">Sign In</button>
+          <div class="account-mailbox" id="accountMailbox" hidden>
+            <div class="saved-builds-head mailbox-head">
+              <div>
+                <strong>Inbox</strong>
+                <p>Welcome and reset messages show up here for local accounts.</p>
+              </div>
+              <button class="ghost-button" id="refreshMailboxButton" type="button">Refresh</button>
             </div>
+            <div class="mailbox-list" id="mailboxList"></div>
           </div>
           <label class="build-name-field">
             <span>Current build name</span>

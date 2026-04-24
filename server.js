@@ -235,11 +235,13 @@ function ensureDataFile(filePath, initialValue) {
 }
 
 function loadUserBuildStore() {
-  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {} });
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
   const store = JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
   store.users = store.users || {};
   store.accountsByEmail = store.accountsByEmail || {};
   store.sessions = store.sessions || {};
+  store.mailboxByEmail = store.mailboxByEmail || {};
+  store.resetTokensByEmail = store.resetTokensByEmail || {};
   return store;
 }
 
@@ -267,7 +269,7 @@ function saveAppConfig(config) {
 }
 
 function saveUserBuildStore(store) {
-  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {} });
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
   fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
 }
 
@@ -285,6 +287,25 @@ function verifyPassword(password, stored) {
   if (!salt || !expected) return false;
   const actual = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
   return crypto.timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
+}
+
+function appendMailboxMessage(store, email, subject, body) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  if (!store.mailboxByEmail[normalizedEmail]) {
+    store.mailboxByEmail[normalizedEmail] = [];
+  }
+  store.mailboxByEmail[normalizedEmail].unshift({
+    id: crypto.randomUUID(),
+    subject,
+    body,
+    createdAt: new Date().toISOString()
+  });
+  store.mailboxByEmail[normalizedEmail] = store.mailboxByEmail[normalizedEmail].slice(0, 20);
+}
+
+function listMailboxMessages(store, email) {
+  return [...(store.mailboxByEmail[normalizeEmail(email)] || [])];
 }
 
 function toBase64UrlBuffer(value) {
@@ -1554,12 +1575,20 @@ const server = http.createServer(async (req, res) => {
         builds: []
       };
       store.accountsByEmail[email] = userId;
+      appendMailboxMessage(
+        store,
+        email,
+        "Welcome to Jimms Part Picker",
+        `Hi ${name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nEmail: ${email}\n\nHave fun building.`
+      );
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
       sendJson(res, 200, {
         ok: true,
         token,
-        user: buildLocalUser(userId, store.users[userId])
+        user: buildLocalUser(userId, store.users[userId]),
+        mailbox: listMailboxMessages(store, email),
+        message: "Account created. A welcome message was delivered to your local inbox."
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -1590,7 +1619,9 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         token,
-        user: buildLocalUser(userId, record)
+        user: buildLocalUser(userId, record),
+        mailbox: listMailboxMessages(store, email),
+        message: "Signed in."
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -1610,6 +1641,139 @@ const server = http.createServer(async (req, res) => {
       saveUserBuildStore(store);
     }
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/forgot-password" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const email = normalizeEmail(body.email);
+      const store = loadUserBuildStore();
+      const userId = store.accountsByEmail[email];
+
+      if (userId && store.users[userId]) {
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const expiresAt = new Date(Date.now() + (1000 * 60 * 20)).toISOString();
+        store.resetTokensByEmail[email] = {
+          userId,
+          code,
+          expiresAt
+        };
+        appendMailboxMessage(
+          store,
+          email,
+          "Password reset instructions",
+          `We received a password reset request for ${email}.\n\nYour reset code is: ${code}\n\nThis code expires at ${expiresAt}.\n\nIf you did not request this, you can ignore this message.`
+        );
+        saveUserBuildStore(store);
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        message: "If that email exists, a password reset message has been delivered to the local inbox.",
+        mailbox: email ? listMailboxMessages(store, email) : []
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/reset-password" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const email = normalizeEmail(body.email);
+      const code = String(body.code || "").trim();
+      const password = String(body.password || "");
+      if (!email) {
+        throw new Error("Enter your account email first.");
+      }
+      if (!code) {
+        throw new Error("Enter the reset code from the email message.");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+
+      const store = loadUserBuildStore();
+      const reset = store.resetTokensByEmail[email];
+      if (!reset || reset.code !== code) {
+        throw new Error("That reset code is not valid.");
+      }
+      if (Date.parse(reset.expiresAt) <= Date.now()) {
+        delete store.resetTokensByEmail[email];
+        saveUserBuildStore(store);
+        throw new Error("That reset code has expired.");
+      }
+
+      const record = store.users[reset.userId];
+      if (!record) {
+        delete store.resetTokensByEmail[email];
+        saveUserBuildStore(store);
+        throw new Error("Account not found for that reset request.");
+      }
+
+      record.passwordHash = hashPassword(password);
+      delete store.resetTokensByEmail[email];
+      appendMailboxMessage(
+        store,
+        email,
+        "Password updated",
+        `The password for ${email} was changed successfully.\n\nYou can now sign in with the new password.`
+      );
+      saveUserBuildStore(store);
+      sendJson(res, 200, {
+        ok: true,
+        message: "Password updated. You can sign in now.",
+        mailbox: listMailboxMessages(store, email)
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/mailbox" && req.method === "GET") {
+    try {
+      const user = await getAuthenticatedUser(req);
+      const store = loadUserBuildStore();
+      sendJson(res, 200, {
+        ok: true,
+        mailbox: listMailboxMessages(store, user.email)
+      });
+    } catch (error) {
+      sendJson(res, 401, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/mailbox-preview" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const email = normalizeEmail(body.email);
+      if (!email) {
+        throw new Error("Enter the email address first.");
+      }
+      const store = loadUserBuildStore();
+      sendJson(res, 200, {
+        ok: true,
+        mailbox: listMailboxMessages(store, email)
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
     return;
   }
 

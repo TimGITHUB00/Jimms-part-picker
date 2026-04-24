@@ -117,17 +117,65 @@ select {
 
 .auth-panel {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
   min-width: 0;
 }
 
+.auth-panel-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .auth-summary {
-  max-width: 220px;
+  max-width: 260px;
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.3;
   text-align: right;
+}
+
+.auth-inline-status {
+  max-width: 300px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.auth-inline-status[data-tone="ok"] {
+  color: var(--accent-dark);
+}
+
+.auth-inline-status[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.auth-form,
+.reset-form {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.auth-form input,
+.reset-form input {
+  min-width: 138px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.reset-form input {
+  min-width: 126px;
 }
 
 .brand {
@@ -439,13 +487,50 @@ h2 {
   gap: 10px;
 }
 
-.account-setup {
+.account-mailbox {
   display: grid;
   gap: 10px;
   padding: 12px;
   border: 1px dashed var(--line);
   border-radius: 8px;
   background: var(--card-soft-bg);
+}
+
+.mailbox-head {
+  align-items: start;
+}
+
+.mailbox-list {
+  display: grid;
+  gap: 8px;
+}
+
+.mailbox-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.mailbox-item strong,
+.mailbox-item span,
+.mailbox-item p {
+  display: block;
+}
+
+.mailbox-item span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.mailbox-item p {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .saved-builds-list {
@@ -933,6 +1018,37 @@ h2 {
   .catalog-head {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .topbar-actions,
+  .auth-panel,
+  .auth-form,
+  .reset-form {
+    width: 100%;
+  }
+
+  .auth-panel,
+  .auth-form,
+  .reset-form {
+    justify-content: stretch;
+  }
+
+  .auth-panel-copy {
+    width: 100%;
+  }
+
+  .auth-summary,
+  .auth-inline-status {
+    max-width: none;
+    text-align: left;
+  }
+
+  .auth-form input,
+  .reset-form input,
+  .auth-form button,
+  .reset-form button,
+  .auth-panel > .ghost-button {
+    width: 100%;
   }
 
   .source-pill {

@@ -38,7 +38,8 @@ const state = {
   savedBuilds: [],
   auth: {
     token: window.localStorage.getItem(AUTH_TOKEN_KEY) || "",
-    user: null
+    user: null,
+    mailbox: []
   },
   benchmarks: {
     status: "idle",
@@ -76,18 +77,28 @@ const benchmarkNote = document.querySelector("#benchmarkNote");
 const benchmarkList = document.querySelector("#benchmarkList");
 const themeToggle = document.querySelector("#themeToggle");
 const authSummary = document.querySelector("#authSummary");
+const authInlineStatus = document.querySelector("#authInlineStatus");
+const authForm = document.querySelector("#authForm");
 const signOutButton = document.querySelector("#signOutButton");
 const savedBuildsStatus = document.querySelector("#savedBuildsStatus");
 const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
 const newBuildButton = document.querySelector("#newBuildButton");
 const savedBuildsList = document.querySelector("#savedBuildsList");
-const accountSetup = document.querySelector("#accountSetup");
 const accountNameInput = document.querySelector("#accountNameInput");
 const accountEmailInput = document.querySelector("#accountEmailInput");
 const accountPasswordInput = document.querySelector("#accountPasswordInput");
 const registerButton = document.querySelector("#registerButton");
 const loginButton = document.querySelector("#loginButton");
+const forgotPasswordButton = document.querySelector("#forgotPasswordButton");
+const resetForm = document.querySelector("#resetForm");
+const resetCodeInput = document.querySelector("#resetCodeInput");
+const resetPasswordInput = document.querySelector("#resetPasswordInput");
+const resetPasswordButton = document.querySelector("#resetPasswordButton");
+const cancelResetButton = document.querySelector("#cancelResetButton");
+const accountMailbox = document.querySelector("#accountMailbox");
+const mailboxList = document.querySelector("#mailboxList");
+const refreshMailboxButton = document.querySelector("#refreshMailboxButton");
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -285,12 +296,83 @@ function savedBuildButtonLabel() {
   saveBuildButton.textContent = state.currentBuildId ? "Update Saved Build" : "Save Build";
 }
 
+function setAuthStatus(message = "", tone = "") {
+  authInlineStatus.textContent = message || "";
+  if (tone) {
+    authInlineStatus.dataset.tone = tone;
+  } else {
+    delete authInlineStatus.dataset.tone;
+  }
+}
+
+function setResetMode(enabled) {
+  resetForm.hidden = !enabled;
+  if (!enabled) {
+    resetCodeInput.value = "";
+    resetPasswordInput.value = "";
+  }
+}
+
+function renderMailbox() {
+  const shouldShow = state.auth.mailbox.length > 0;
+  accountMailbox.hidden = !shouldShow;
+  mailboxList.innerHTML = "";
+
+  if (!shouldShow) {
+    return;
+  }
+
+  state.auth.mailbox.forEach((message) => {
+    const item = document.createElement("article");
+    item.className = "mailbox-item";
+
+    const subject = document.createElement("strong");
+    subject.textContent = message.subject || "Message";
+
+    const meta = document.createElement("span");
+    meta.textContent = formatSavedBuildTime(message.createdAt);
+
+    const body = document.createElement("p");
+    body.textContent = message.body || "";
+
+    item.append(subject, meta, body);
+    mailboxList.append(item);
+  });
+}
+
+async function refreshMailboxPreview() {
+  const email = (state.auth.user?.email || accountEmailInput.value || "").trim();
+  if (!email) {
+    state.auth.mailbox = [];
+    renderMailbox();
+    setAuthStatus("Enter an email address to load inbox messages.", "warn");
+    return;
+  }
+
+  const response = await fetch(state.auth.user ? "/api/auth/local/mailbox" : "/api/auth/local/mailbox-preview", {
+    method: state.auth.user ? "GET" : "POST",
+    headers: state.auth.user
+      ? { ...authHeaders() }
+      : { "Content-Type": "application/json" },
+    body: state.auth.user ? undefined : JSON.stringify({ email })
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "Could not load inbox messages.");
+  }
+
+  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
+  renderMailbox();
+}
+
 async function fetchSavedBuilds() {
   if (!state.auth.token) {
     state.auth.user = null;
+    state.auth.mailbox = [];
     state.savedBuilds = loadLocalSavedBuilds();
     renderSavedBuilds();
     renderAuthState();
+    renderMailbox();
     return;
   }
 
@@ -304,15 +386,26 @@ async function fetchSavedBuilds() {
     const data = await response.json();
     state.auth.user = data.user || null;
     state.savedBuilds = data.builds || [];
+    state.auth.mailbox = [];
   } catch (error) {
     state.auth.token = "";
     state.auth.user = null;
+    state.auth.mailbox = [];
     state.savedBuilds = loadLocalSavedBuilds();
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
   }
 
   renderAuthState();
   renderSavedBuilds();
+  if (state.auth.user) {
+    try {
+      await refreshMailboxPreview();
+    } catch (error) {
+      setAuthStatus(error.message || "Could not load inbox messages.", "warn");
+    }
+  } else {
+    renderMailbox();
+  }
 }
 
 async function saveCurrentBuild() {
@@ -368,16 +461,19 @@ function renderAuthState() {
   if (state.auth.user) {
     authSummary.textContent = `${state.auth.user.name} (${state.auth.user.email})`;
     signOutButton.hidden = false;
-    accountSetup.hidden = true;
+    authForm.hidden = true;
+    setResetMode(false);
     return;
   }
 
   authSummary.textContent = "Guest mode (local saves still work)";
   signOutButton.hidden = true;
-  accountSetup.hidden = false;
+  authForm.hidden = false;
 }
 
 async function loadAuthConfig() {
+  setResetMode(false);
+  setAuthStatus("");
   renderAuthState();
   renderSavedBuilds();
   await fetchSavedBuilds();
@@ -408,10 +504,63 @@ async function submitLocalAuth(mode) {
 
   state.auth.token = data.token || "";
   state.auth.user = data.user || null;
+  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
   window.localStorage.setItem(AUTH_TOKEN_KEY, state.auth.token);
   accountPasswordInput.value = "";
+  setResetMode(false);
+  setAuthStatus(data.message || (mode === "register" ? "Account created." : "Signed in."), "ok");
   renderAuthState();
+  renderMailbox();
   await fetchSavedBuilds();
+}
+
+async function requestPasswordReset() {
+  const email = accountEmailInput.value.trim();
+  const response = await fetch("/api/auth/local/forgot-password", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "Could not start password reset.");
+  }
+
+  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
+  setResetMode(true);
+  setAuthStatus(data.message || "Reset message sent.", "ok");
+  renderMailbox();
+}
+
+async function submitPasswordReset() {
+  const email = accountEmailInput.value.trim();
+  const code = resetCodeInput.value.trim();
+  const password = resetPasswordInput.value;
+  const response = await fetch("/api/auth/local/reset-password", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email,
+      code,
+      password
+    })
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "Could not reset password.");
+  }
+
+  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
+  accountPasswordInput.value = "";
+  resetPasswordInput.value = "";
+  resetCodeInput.value = "";
+  setResetMode(false);
+  setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
+  renderMailbox();
 }
 
 function parseEuro(price) {
@@ -1549,28 +1698,58 @@ registerButton.addEventListener("click", async () => {
   try {
     await submitLocalAuth("register");
   } catch (error) {
-    window.alert(error.message || "Could not create that account.");
+    setAuthStatus(error.message || "Could not create that account.", "warn");
   }
 });
 loginButton.addEventListener("click", async () => {
   try {
     await submitLocalAuth("login");
   } catch (error) {
-    window.alert(error.message || "Could not sign in.");
+    setAuthStatus(error.message || "Could not sign in.", "warn");
+  }
+});
+forgotPasswordButton.addEventListener("click", async () => {
+  try {
+    await requestPasswordReset();
+  } catch (error) {
+    setAuthStatus(error.message || "Could not start password reset.", "warn");
+  }
+});
+resetPasswordButton.addEventListener("click", async () => {
+  try {
+    await submitPasswordReset();
+  } catch (error) {
+    setAuthStatus(error.message || "Could not reset password.", "warn");
+  }
+});
+cancelResetButton.addEventListener("click", () => {
+  setResetMode(false);
+  setAuthStatus("");
+});
+refreshMailboxButton.addEventListener("click", async () => {
+  try {
+    await refreshMailboxPreview();
+    setAuthStatus(state.auth.mailbox.length > 0 ? "Inbox refreshed." : "No local inbox messages yet for that email.", "ok");
+  } catch (error) {
+    setAuthStatus(error.message || "Could not load inbox messages.", "warn");
   }
 });
 signOutButton.addEventListener("click", () => {
   const headers = authHeaders();
   state.auth.token = "";
   state.auth.user = null;
+  state.auth.mailbox = [];
   state.savedBuilds = loadLocalSavedBuilds();
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   fetch("/api/auth/local/logout", {
     method: "POST",
     headers
   }).catch(() => {});
+  setResetMode(false);
+  setAuthStatus("Signed out.");
   renderAuthState();
   renderSavedBuilds();
+  renderMailbox();
 });
 
 applyTheme(getStoredTheme());

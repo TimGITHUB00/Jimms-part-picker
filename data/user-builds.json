@@ -1,3 +1,20 @@
 {
-  "users": {}
+  "users": {
+    "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705": {
+      "profile": {
+        "email": "tiitimsan@gmail.com",
+        "name": "TimJPP00",
+        "picture": "",
+        "authProvider": "local"
+      },
+      "passwordHash": "2e97a6ad24ea0abe5bd5683ac81fd666:53e725ed6acacb90e4d3b5a4bc2c521aa4f14a5bb7e0290b8610b1e5cd2b4f6ec61a2b1d8c8c036e18f812009e49ed33237d2835f720c3b52f4cf398102f7f71",
+      "builds": []
+    }
+  },
+  "accountsByEmail": {
+    "tiitimsan@gmail.com": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705"
+  },
+  "sessions": {},
+  "mailboxByEmail": {},
+  "resetTokensByEmail": {}
 }
