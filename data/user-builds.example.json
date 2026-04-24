@@ -1,0 +1,8 @@
+{
+  "users": {},
+  "accountsByEmail": {},
+  "accountsByUsername": {},
+  "sessions": {},
+  "mailboxByEmail": {},
+  "resetTokensByEmail": {}
+}
