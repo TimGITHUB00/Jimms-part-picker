@@ -24,7 +24,7 @@ const jimmsUrls = {
 
 const THEME_KEY = "jimms-part-picker-theme";
 const DRAFT_KEY = "jimms-part-picker-current-build";
-const GOOGLE_TOKEN_KEY = "jimms-part-picker-google-token";
+const AUTH_TOKEN_KEY = "jimms-part-picker-auth-token";
 const LOCAL_SAVED_BUILDS_KEY = "jimms-part-picker-local-saved-builds";
 
 const state = {
@@ -37,9 +37,7 @@ const state = {
   currentBuildName: "My Build",
   savedBuilds: [],
   auth: {
-    clientId: "",
-    enabled: false,
-    token: window.localStorage.getItem(GOOGLE_TOKEN_KEY) || "",
+    token: window.localStorage.getItem(AUTH_TOKEN_KEY) || "",
     user: null
   },
   benchmarks: {
@@ -78,16 +76,18 @@ const benchmarkNote = document.querySelector("#benchmarkNote");
 const benchmarkList = document.querySelector("#benchmarkList");
 const themeToggle = document.querySelector("#themeToggle");
 const authSummary = document.querySelector("#authSummary");
-const googleSignin = document.querySelector("#googleSignin");
 const signOutButton = document.querySelector("#signOutButton");
 const savedBuildsStatus = document.querySelector("#savedBuildsStatus");
 const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
 const newBuildButton = document.querySelector("#newBuildButton");
 const savedBuildsList = document.querySelector("#savedBuildsList");
-const googleSetup = document.querySelector("#googleSetup");
-const googleClientIdInput = document.querySelector("#googleClientIdInput");
-const saveGoogleConfigButton = document.querySelector("#saveGoogleConfigButton");
+const accountSetup = document.querySelector("#accountSetup");
+const accountNameInput = document.querySelector("#accountNameInput");
+const accountEmailInput = document.querySelector("#accountEmailInput");
+const accountPasswordInput = document.querySelector("#accountPasswordInput");
+const registerButton = document.querySelector("#registerButton");
+const loginButton = document.querySelector("#loginButton");
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -100,9 +100,6 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = nextTheme;
   themeToggle.setAttribute("aria-pressed", String(nextTheme === "dark"));
   themeToggle.textContent = nextTheme === "dark" ? "Light mode" : "Dark mode";
-  if (typeof window.google !== "undefined") {
-    renderGoogleButton();
-  }
 }
 
 function toggleTheme() {
@@ -205,9 +202,7 @@ function renderSavedBuilds() {
   savedBuildsList.innerHTML = "";
 
   if (!state.auth.user) {
-    savedBuildsStatus.textContent = state.auth.enabled
-      ? "Save builds locally now, or sign in with Google to sync them to your account."
-      : "Google sync is optional. You can already save named builds locally on this device.";
+    savedBuildsStatus.textContent = "Save builds locally now, or sign in to keep named builds in your account.";
     saveBuildButton.disabled = false;
     savedBuildButtonLabel();
   }
@@ -313,7 +308,7 @@ async function fetchSavedBuilds() {
     state.auth.token = "";
     state.auth.user = null;
     state.savedBuilds = loadLocalSavedBuilds();
-    window.localStorage.removeItem(GOOGLE_TOKEN_KEY);
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
   }
 
   renderAuthState();
@@ -370,121 +365,53 @@ async function saveCurrentBuild() {
 }
 
 function renderAuthState() {
-  if (!state.auth.enabled) {
-    authSummary.textContent = "Local saves enabled";
-    googleSignin.innerHTML = "";
-    signOutButton.hidden = true;
-    googleSetup.hidden = false;
-    googleClientIdInput.value = state.auth.clientId || "";
-    return;
-  }
-
   if (state.auth.user) {
     authSummary.textContent = `${state.auth.user.name} (${state.auth.user.email})`;
-    googleSignin.innerHTML = "";
     signOutButton.hidden = false;
-    googleSetup.hidden = true;
+    accountSetup.hidden = true;
     return;
   }
 
-  authSummary.textContent = "Guest mode";
+  authSummary.textContent = "Guest mode (local saves still work)";
   signOutButton.hidden = true;
-  googleSetup.hidden = false;
-  googleClientIdInput.value = state.auth.clientId || "";
-}
-
-async function handleGoogleCredential(response) {
-  try {
-    const verifyResponse = await fetch("/api/auth/google/verify", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        credential: response.credential
-      })
-    });
-    const data = await verifyResponse.json();
-    if (!verifyResponse.ok || !data.ok) {
-      throw new Error(data.message || "Google sign-in failed");
-    }
-    state.auth.token = response.credential;
-    state.auth.user = data.user;
-    window.localStorage.setItem(GOOGLE_TOKEN_KEY, response.credential);
-    renderAuthState();
-    await fetchSavedBuilds();
-  } catch (error) {
-    window.alert(error.message || "Google sign-in failed.");
-  }
-}
-
-function renderGoogleButton() {
-  if (!state.auth.enabled || !window.google || !googleSignin) return;
-
-  googleSignin.innerHTML = "";
-  if (state.auth.user) return;
-
-  window.google.accounts.id.initialize({
-    client_id: state.auth.clientId,
-    callback: handleGoogleCredential
-  });
-
-  window.google.accounts.id.renderButton(googleSignin, {
-    theme: document.documentElement.dataset.theme === "dark" ? "filled_black" : "outline",
-    size: "medium",
-    shape: "rectangular",
-    text: "signin_with"
-  });
-}
-
-function scheduleGoogleButtonRender(attempt = 0) {
-  if (!state.auth.enabled) return;
-  if (window.google) {
-    renderGoogleButton();
-    return;
-  }
-  if (attempt >= 20) return;
-  window.setTimeout(() => scheduleGoogleButtonRender(attempt + 1), 300);
+  accountSetup.hidden = false;
 }
 
 async function loadAuthConfig() {
-  try {
-    const response = await fetch("/api/auth/google/config");
-    const data = await response.json();
-    state.auth.enabled = Boolean(data.enabled && data.clientId);
-    state.auth.clientId = data.clientId || "";
-  } catch (error) {
-    state.auth.enabled = false;
-    state.auth.clientId = "";
-  }
-
   renderAuthState();
   renderSavedBuilds();
-  scheduleGoogleButtonRender();
   await fetchSavedBuilds();
 }
 
-async function saveGoogleClientId() {
-  const value = googleClientIdInput.value.trim();
-  const response = await fetch("/api/auth/google/config", {
+async function submitLocalAuth(mode) {
+  const email = accountEmailInput.value.trim();
+  const password = accountPasswordInput.value;
+  const payload = {
+    email,
+    password
+  };
+  if (mode === "register") {
+    payload.name = accountNameInput.value.trim();
+  }
+
+  const response = await fetch(`/api/auth/local/${mode}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      googleClientId: value
-    })
+    body: JSON.stringify(payload)
   });
   const data = await response.json();
   if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Could not save Google client ID.");
+    throw new Error(data.message || "Authentication failed.");
   }
 
-  state.auth.clientId = data.clientId || "";
-  state.auth.enabled = Boolean(data.enabled && data.clientId);
+  state.auth.token = data.token || "";
+  state.auth.user = data.user || null;
+  window.localStorage.setItem(AUTH_TOKEN_KEY, state.auth.token);
+  accountPasswordInput.value = "";
   renderAuthState();
-  renderSavedBuilds();
-  scheduleGoogleButtonRender();
+  await fetchSavedBuilds();
 }
 
 function parseEuro(price) {
@@ -1618,21 +1545,32 @@ newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
-saveGoogleConfigButton.addEventListener("click", async () => {
+registerButton.addEventListener("click", async () => {
   try {
-    await saveGoogleClientId();
+    await submitLocalAuth("register");
   } catch (error) {
-    window.alert(error.message || "Could not enable Google sign-in.");
+    window.alert(error.message || "Could not create that account.");
+  }
+});
+loginButton.addEventListener("click", async () => {
+  try {
+    await submitLocalAuth("login");
+  } catch (error) {
+    window.alert(error.message || "Could not sign in.");
   }
 });
 signOutButton.addEventListener("click", () => {
+  const headers = authHeaders();
   state.auth.token = "";
   state.auth.user = null;
   state.savedBuilds = loadLocalSavedBuilds();
-  window.localStorage.removeItem(GOOGLE_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  fetch("/api/auth/local/logout", {
+    method: "POST",
+    headers
+  }).catch(() => {});
   renderAuthState();
   renderSavedBuilds();
-  renderGoogleButton();
 });
 
 applyTheme(getStoredTheme());

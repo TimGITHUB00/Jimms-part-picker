@@ -235,8 +235,12 @@ function ensureDataFile(filePath, initialValue) {
 }
 
 function loadUserBuildStore() {
-  ensureDataFile(USER_BUILDS_PATH, { users: {} });
-  return JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {} });
+  const store = JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
+  store.users = store.users || {};
+  store.accountsByEmail = store.accountsByEmail || {};
+  store.sessions = store.sessions || {};
+  return store;
 }
 
 function loadAppConfig() {
@@ -263,8 +267,24 @@ function saveAppConfig(config) {
 }
 
 function saveUserBuildStore(store) {
-  ensureDataFile(USER_BUILDS_PATH, { users: {} });
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {} });
   fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  const [salt, expected] = String(stored || "").split(":");
+  if (!salt || !expected) return false;
+  const actual = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
 }
 
 function toBase64UrlBuffer(value) {
@@ -356,7 +376,28 @@ async function verifyGoogleIdToken(idToken) {
     email: payload.email || "",
     name: payload.name || payload.email || "Google user",
     picture: payload.picture || "",
-    emailVerified: Boolean(payload.email_verified)
+    emailVerified: Boolean(payload.email_verified),
+    authProvider: "google"
+  };
+}
+
+function createLocalSession(store, userId) {
+  const sessionId = crypto.randomBytes(24).toString("hex");
+  store.sessions[sessionId] = {
+    userId,
+    createdAt: new Date().toISOString()
+  };
+  return `local_${sessionId}`;
+}
+
+function buildLocalUser(userId, record) {
+  return {
+    sub: userId,
+    email: record.profile?.email || "",
+    name: record.profile?.name || record.profile?.email || "User",
+    picture: record.profile?.picture || "",
+    emailVerified: true,
+    authProvider: "local"
   };
 }
 
@@ -364,10 +405,21 @@ async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    throw new Error("Missing Google bearer token.");
+    throw new Error("Missing sign-in token.");
   }
 
-  return verifyGoogleIdToken(match[1]);
+  const token = match[1];
+  if (token.startsWith("local_")) {
+    const sessionId = token.slice("local_".length);
+    const store = loadUserBuildStore();
+    const session = store.sessions[sessionId];
+    if (!session || !store.users[session.userId]) {
+      throw new Error("Local session has expired.");
+    }
+    return buildLocalUser(session.userId, store.users[session.userId]);
+  }
+
+  return verifyGoogleIdToken(token);
 }
 
 function buildRecordSummary(record) {
@@ -386,7 +438,8 @@ function getUserBuilds(store, user) {
       profile: {
         email: user.email,
         name: user.name,
-        picture: user.picture
+        picture: user.picture,
+        authProvider: user.authProvider || "google"
       },
       builds: []
     };
@@ -394,7 +447,8 @@ function getUserBuilds(store, user) {
     store.users[user.sub].profile = {
       email: user.email,
       name: user.name,
-      picture: user.picture
+      picture: user.picture,
+      authProvider: user.authProvider || store.users[user.sub].profile?.authProvider || "google"
     };
   }
 
@@ -1463,6 +1517,99 @@ const server = http.createServer(async (req, res) => {
       enabled: Boolean(clientId),
       clientId: clientId || ""
     });
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/register" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const email = normalizeEmail(body.email);
+      const password = String(body.password || "");
+      const name = String(body.name || "").trim() || email;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error("Enter a valid email address.");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+
+      const store = loadUserBuildStore();
+      if (store.accountsByEmail[email]) {
+        sendJson(res, 409, {
+          ok: false,
+          message: "That email is already registered."
+        });
+        return;
+      }
+
+      const userId = `local-${crypto.randomUUID()}`;
+      store.users[userId] = {
+        profile: {
+          email,
+          name,
+          picture: "",
+          authProvider: "local"
+        },
+        passwordHash: hashPassword(password),
+        builds: []
+      };
+      store.accountsByEmail[email] = userId;
+      const token = createLocalSession(store, userId);
+      saveUserBuildStore(store);
+      sendJson(res, 200, {
+        ok: true,
+        token,
+        user: buildLocalUser(userId, store.users[userId])
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/login" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const email = normalizeEmail(body.email);
+      const password = String(body.password || "");
+      const store = loadUserBuildStore();
+      const userId = store.accountsByEmail[email];
+      const record = userId ? store.users[userId] : null;
+      if (!record || !verifyPassword(password, record.passwordHash)) {
+        sendJson(res, 401, {
+          ok: false,
+          message: "Email or password is incorrect."
+        });
+        return;
+      }
+      const token = createLocalSession(store, userId);
+      saveUserBuildStore(store);
+      sendJson(res, 200, {
+        ok: true,
+        token,
+        user: buildLocalUser(userId, record)
+      });
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/auth/local/logout" && req.method === "POST") {
+    const authHeader = req.headers.authorization || "";
+    const match = authHeader.match(/^Bearer\s+local_(.+)$/i);
+    if (match) {
+      const store = loadUserBuildStore();
+      delete store.sessions[match[1]];
+      saveUserBuildStore(store);
+    }
+    sendJson(res, 200, { ok: true });
     return;
   }
 

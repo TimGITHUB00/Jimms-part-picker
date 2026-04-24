@@ -18,7 +18,6 @@
       <div class="topbar-actions">
         <div class="auth-panel">
           <div class="auth-summary" id="authSummary">Guest mode</div>
-          <div id="googleSignin"></div>
           <button class="ghost-button" id="signOutButton" type="button" hidden>Sign out</button>
         </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" title="Toggle dark mode">Dark mode</button>
@@ -40,17 +39,26 @@
           <div class="saved-builds-head">
             <div>
               <strong>Saved Builds</strong>
-              <p id="savedBuildsStatus">Sign in with Google to save named builds to your account.</p>
+              <p id="savedBuildsStatus">Save builds locally now, or sign in to keep named builds in your account.</p>
             </div>
             <button class="ghost-button" id="newBuildButton" type="button">New</button>
           </div>
-          <div class="google-setup" id="googleSetup" hidden>
+          <div class="account-setup" id="accountSetup">
             <label class="build-name-field">
-              <span>Google Client ID</span>
-              <input id="googleClientIdInput" type="text" placeholder="1234567890-abc123.apps.googleusercontent.com">
+              <span>Name</span>
+              <input id="accountNameInput" type="text" maxlength="80" placeholder="Tim Builder">
+            </label>
+            <label class="build-name-field">
+              <span>Email</span>
+              <input id="accountEmailInput" type="email" autocomplete="username" placeholder="name@example.com">
+            </label>
+            <label class="build-name-field">
+              <span>Password</span>
+              <input id="accountPasswordInput" type="password" autocomplete="current-password" placeholder="At least 6 characters">
             </label>
             <div class="saved-builds-actions">
-              <button class="ghost-button" id="saveGoogleConfigButton" type="button">Enable Google Sign-In</button>
+              <button class="ghost-button" id="registerButton" type="button">Create Account</button>
+              <button class="ghost-button" id="loginButton" type="button">Sign In</button>
             </div>
           </div>
           <label class="build-name-field">
@@ -175,8 +183,6 @@
         </div>
       </article>
     </template>
-
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/app.js" defer></script>
   </body>
 </html>
