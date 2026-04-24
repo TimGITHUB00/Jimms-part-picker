@@ -22,6 +22,8 @@ const jimmsUrls = {
   psu: "https://www.jimms.fi/fi/Product/List/000-00U"
 };
 
+const THEME_KEY = "jimms-part-picker-theme";
+
 const state = {
   activeCategory: "cpu",
   activeProductCategory: "cpu",
@@ -62,6 +64,27 @@ const compatibilityList = document.querySelector("#compatibilityList");
 const benchmarkPanel = document.querySelector("#benchmarkPanel");
 const benchmarkNote = document.querySelector("#benchmarkNote");
 const benchmarkList = document.querySelector("#benchmarkList");
+const themeToggle = document.querySelector("#themeToggle");
+
+function getStoredTheme() {
+  const stored = window.localStorage.getItem(THEME_KEY);
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const nextTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = nextTheme;
+  themeToggle.setAttribute("aria-pressed", String(nextTheme === "dark"));
+  themeToggle.textContent = nextTheme === "dark" ? "Light mode" : "Dark mode";
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const nextTheme = current === "dark" ? "light" : "dark";
+  window.localStorage.setItem(THEME_KEY, nextTheme);
+  applyTheme(nextTheme);
+}
 
 function parseEuro(price) {
   const normalized = String(price)
@@ -1176,7 +1199,9 @@ clearBuild.addEventListener("click", () => {
 });
 
 addToJimmsCart.addEventListener("click", openBuildInJimmsCart);
+themeToggle.addEventListener("click", toggleTheme);
 
+applyTheme(getStoredTheme());
 renderTabs();
 renderPartRows();
 loadProducts();

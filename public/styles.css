@@ -5,11 +5,73 @@
   --line: #d9e0e8;
   --panel: #ffffff;
   --soft: #f4f7fa;
+  --surface: #eef3f7;
+  --surface-strong: #ffffff;
   --accent: #0f766e;
   --accent-dark: #0a514c;
   --warn: #9a3412;
   --blue: #2458a6;
   --shadow: 0 18px 45px rgba(34, 45, 62, 0.12);
+  --topbar-bg: rgba(255, 255, 255, 0.92);
+  --chip-blue-bg: #edf4ff;
+  --chip-blue-ink: #1e4f99;
+  --chip-ok-bg: #e8f5f3;
+  --chip-ok-ink: #0a514c;
+  --chip-warn-bg: #fff4de;
+  --chip-warn-ink: #8a4b05;
+  --chip-error-bg: #fee7df;
+  --chip-error-ink: #9a3412;
+  --tag-bg: #f8fafc;
+  --tag-ink: #405064;
+  --tag-line: #dce6ef;
+  --tag-value-bg: #eef8f1;
+  --tag-value-line: #cfe8d6;
+  --tag-value-ink: #1d6b3c;
+  --tag-thermal-bg: #eef5ff;
+  --tag-thermal-line: #d7e4fb;
+  --tag-thermal-ink: #2458a6;
+  --spec-tag-bg: #eef5f4;
+  --spec-tag-ink: #0a514c;
+  --card-soft-bg: #fbfcff;
+  --button-bg: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #ecf2fb;
+  --muted: #9eaac1;
+  --line: #273244;
+  --panel: #111927;
+  --soft: #162131;
+  --surface: #08111d;
+  --surface-strong: #0d1725;
+  --accent: #15a094;
+  --accent-dark: #76d8ce;
+  --warn: #ff8a65;
+  --blue: #6ea8ff;
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+  --topbar-bg: rgba(10, 17, 29, 0.9);
+  --chip-blue-bg: #162840;
+  --chip-blue-ink: #9fc3ff;
+  --chip-ok-bg: #12312d;
+  --chip-ok-ink: #8ce5da;
+  --chip-warn-bg: #3b2a14;
+  --chip-warn-ink: #ffd18b;
+  --chip-error-bg: #3d1f1a;
+  --chip-error-ink: #ffab91;
+  --tag-bg: #172334;
+  --tag-ink: #c1cede;
+  --tag-line: #2b3b52;
+  --tag-value-bg: #173326;
+  --tag-value-line: #27543e;
+  --tag-value-ink: #99e0b0;
+  --tag-thermal-bg: #15283f;
+  --tag-thermal-line: #28466d;
+  --tag-thermal-ink: #9dc0ff;
+  --spec-tag-bg: #17302b;
+  --spec-tag-ink: #95e2d7;
+  --card-soft-bg: #0e1622;
+  --button-bg: #121d2d;
 }
 
 * {
@@ -19,7 +81,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: #eef3f7;
+  background: var(--surface);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -40,9 +102,16 @@ select {
   gap: 18px;
   min-height: 72px;
   padding: 12px clamp(16px, 4vw, 44px);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--topbar-bg);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(14px);
+}
+
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .brand {
@@ -76,14 +145,28 @@ select {
 }
 
 .source-pill,
+.theme-toggle,
 .ghost-button,
 .jimms-link,
 .jimms-cart-button,
 .product-actions button {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel);
+  background: var(--button-bg);
   color: var(--ink);
+}
+
+.theme-toggle {
+  min-height: 40px;
+  padding: 0 12px;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.theme-toggle[aria-pressed="true"] {
+  border-color: var(--blue);
+  color: var(--blue);
 }
 
 .source-pill {
@@ -324,8 +407,8 @@ h2 {
   min-width: 92px;
   padding: 5px 8px;
   border-radius: 8px;
-  background: #edf4ff;
-  color: #1e4f99;
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-ink);
   font-size: 0.8rem;
   font-weight: 850;
   text-align: center;
@@ -346,7 +429,7 @@ h2 {
 .benchmark-game {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcff;
+  background: var(--card-soft-bg);
   padding: 12px;
 }
 
@@ -386,21 +469,21 @@ h2 {
   min-width: 58px;
   padding: 5px 8px;
   border-radius: 8px;
-  background: #e8f5f3;
-  color: var(--accent-dark);
+  background: var(--chip-ok-bg);
+  color: var(--chip-ok-ink);
   font-size: 0.8rem;
   font-weight: 850;
   text-align: center;
 }
 
 .compatibility[data-status="warn"] .compatibility-head span {
-  background: #fff4de;
-  color: #8a4b05;
+  background: var(--chip-warn-bg);
+  color: var(--chip-warn-ink);
 }
 
 .compatibility[data-status="error"] .compatibility-head span {
-  background: #fee7df;
-  color: var(--warn);
+  background: var(--chip-error-bg);
+  color: var(--chip-error-ink);
 }
 
 .compatibility ul {
@@ -486,7 +569,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 13px;
-  background: white;
+  background: var(--surface-strong);
   color: var(--ink);
 }
 
@@ -586,7 +669,7 @@ h2 {
 .product-visual.has-image {
   display: grid;
   place-items: center;
-  background: white;
+  background: var(--surface-strong);
 }
 
 .product-visual.has-image::before,
@@ -629,24 +712,24 @@ h2 {
 
 .product-details span {
   padding: 4px 7px;
-  border: 1px solid #dce6ef;
+  border: 1px solid var(--tag-line);
   border-radius: 8px;
-  background: #f8fafc;
-  color: #405064;
+  background: var(--tag-bg);
+  color: var(--tag-ink);
   font-size: 0.78rem;
   font-weight: 760;
 }
 
 .product-details span[data-tone="value"] {
-  background: #eef8f1;
-  border-color: #cfe8d6;
-  color: #1d6b3c;
+  background: var(--tag-value-bg);
+  border-color: var(--tag-value-line);
+  color: var(--tag-value-ink);
 }
 
 .product-details span[data-tone="thermal"] {
-  background: #eef5ff;
-  border-color: #d7e4fb;
-  color: #2458a6;
+  background: var(--tag-thermal-bg);
+  border-color: var(--tag-thermal-line);
+  color: var(--tag-thermal-ink);
 }
 
 .desc,
@@ -671,8 +754,8 @@ h2 {
 .spec-tags span {
   padding: 4px 7px;
   border-radius: 8px;
-  background: #eef5f4;
-  color: var(--accent-dark);
+  background: var(--spec-tag-bg);
+  color: var(--spec-tag-ink);
   font-size: 0.78rem;
   font-weight: 750;
 }
