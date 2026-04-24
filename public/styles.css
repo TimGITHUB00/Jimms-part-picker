@@ -637,6 +637,18 @@ h2 {
   font-weight: 760;
 }
 
+.product-details span[data-tone="value"] {
+  background: #eef8f1;
+  border-color: #cfe8d6;
+  color: #1d6b3c;
+}
+
+.product-details span[data-tone="thermal"] {
+  background: #eef5ff;
+  border-color: #d7e4fb;
+  color: #2458a6;
+}
+
 .desc,
 .stock {
   margin-top: 8px;

@@ -7,6 +7,7 @@ const PORT = process.env.PORT || 4173;
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const BENCHMARK_DATASET_PATH = path.join(DATA_DIR, "local-benchmarks.json");
+const GPU_MARKET_DATASET_PATH = path.join(DATA_DIR, "gpu-market-data.json");
 const JIMMS_BASE = "https://www.jimms.fi";
 
 const categories = {
@@ -28,6 +29,7 @@ const cacheMs = 1000 * 60 * 12;
 const pageSize = 100;
 const maxPagesPerCategory = 30;
 let localBenchmarkDatasetCache = null;
+let gpuMarketDatasetCache = null;
 
 const fallbackProducts = {
   cpu: [
@@ -187,6 +189,13 @@ function loadLocalBenchmarkDataset() {
   return localBenchmarkDatasetCache;
 }
 
+function loadGpuMarketDataset() {
+  if (gpuMarketDatasetCache) return gpuMarketDatasetCache;
+  const raw = fs.readFileSync(GPU_MARKET_DATASET_PATH, "utf8");
+  gpuMarketDatasetCache = JSON.parse(raw);
+  return gpuMarketDatasetCache;
+}
+
 function normalizeBenchmarkText(value) {
   return String(value || "")
     .toLowerCase()
@@ -200,6 +209,13 @@ function formatEuro(value) {
     style: "currency",
     currency: "EUR"
   }).format(Number(value) || 0).replace(/\u00a0/g, " ");
+}
+
+function parsePriceNumber(value) {
+  return Number(String(value || "")
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".")) || 0;
 }
 
 function normalizeSocket(value) {
@@ -717,9 +733,105 @@ function inferBenchmarkGpuName(name) {
   return text.trim();
 }
 
+function inferGpuModelName(name) {
+  return inferBenchmarkGpuName(name)
+    .replace(/\s+/g, " ")
+    .replace(/\bGeForce\b/gi, "")
+    .replace(/\bRadeon\b/gi, "")
+    .trim();
+}
+
+function classifyGpuValueTier(valueScore) {
+  if (valueScore >= 0.27) return "excellent";
+  if (valueScore >= 0.22) return "good";
+  if (valueScore >= 0.17) return "fair";
+  return "poor";
+}
+
+function classifyGpuThermalTier(thermalRating) {
+  if (thermalRating >= 8.5) return "excellent";
+  if (thermalRating >= 7) return "good";
+  if (thermalRating >= 5.5) return "average";
+  return "warm";
+}
+
+function thermalLabelForTier(tier) {
+  return {
+    excellent: "Cool-running",
+    good: "Good thermals",
+    average: "Average thermals",
+    warm: "Runs warm"
+  }[tier] || "Thermals unknown";
+}
+
+function labelizeTier(value) {
+  return String(value || "")
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
+
+function scoreGpuMarketMatch(query, candidate) {
+  return scoreBenchmarkHardwareMatch(query, candidate);
+}
+
+function findGpuMarketEntry(name, entries) {
+  const query = String(name || "").trim();
+  if (!query) return null;
+
+  let best = null;
+  let bestScore = 0;
+  for (const entry of entries || []) {
+    const score = scoreGpuMarketMatch(query, entry.name);
+    if (score > bestScore) {
+      best = entry;
+      bestScore = score;
+    }
+  }
+
+  if (!best || bestScore < 90) return null;
+  return { ...best, matchScore: bestScore };
+}
+
+function buildGpuMarketSpecs(item) {
+  if (item.category !== "gpu") return {};
+
+  const dataset = loadGpuMarketDataset();
+  const modelName = inferGpuModelName(item.name || item.displayName || "");
+  const marketEntry = findGpuMarketEntry(modelName, dataset.gpus);
+  if (!marketEntry) return {};
+
+  const detectedVram = Number(firstMatch(`${item.name || ""} ${item.description || ""}`, /\b(\d+)\s*GB\b/i)) || null;
+  const priceEur = parsePriceNumber(item.price);
+  const valueScore = priceEur > 0 ? Number((marketEntry.performanceIndex / priceEur).toFixed(3)) : null;
+  const valueTier = valueScore ? classifyGpuValueTier(valueScore) : null;
+  const thermalTier = classifyGpuThermalTier(marketEntry.thermalRating || 0);
+  const isLowVramVariant = detectedVram && marketEntry.vramGb && detectedVram < marketEntry.vramGb;
+  const valueSummary = isLowVramVariant
+    ? `${marketEntry.valueSummary} This specific card variant has less VRAM than the strongest version of this model.`
+    : marketEntry.valueSummary || "";
+
+  return {
+    gpuModel: marketEntry.name,
+    performanceIndex: marketEntry.performanceIndex,
+    rayTracingIndex: marketEntry.rayTracingIndex,
+    vramGb: detectedVram || marketEntry.vramGb,
+    boardPowerW: marketEntry.boardPowerW,
+    targetResolution: marketEntry.targetResolution,
+    efficiencyTier: marketEntry.efficiencyTier,
+    thermalTier,
+    thermalLabel: thermalLabelForTier(thermalTier),
+    thermalRating: marketEntry.thermalRating,
+    valueScore,
+    valueTier,
+    valueLabel: valueTier ? `${labelizeTier(valueTier)} value` : null,
+    valueSummary,
+    strengths: marketEntry.strengths || [],
+    notes: marketEntry.notes || ""
+  };
+}
+
 function deriveSpecs(item) {
   const text = `${item.name || ""} ${item.description || ""} ${item.productGroupName || ""} ${item.productGroupFullName || ""}`;
-  const specs = {};
+  const specs = buildGpuMarketSpecs(item);
 
   if (item.category === "cpu") {
     specs.socket = detectSocket(text);
@@ -738,6 +850,8 @@ function deriveSpecs(item) {
   if (item.category === "gpu") {
     specs.memoryType = /GDDR\d/i.test(text) ? firstMatch(text, /\b(GDDR\d)\b/i).toUpperCase() : null;
     specs.capacity = firstMatch(text, /\b\d+\s*(?:GB|TB)\b/i)?.replace(/\s+/g, "") || null;
+    const vramMatch = specs.capacity ? specs.capacity.match(/(\d+)\s*GB/i) : null;
+    if (vramMatch) specs.vramGb = Number(vramMatch[1]);
     specs.estimatedWatts = estimateGpuWatts(text);
   }
 

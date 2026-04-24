@@ -252,7 +252,7 @@ function renderProducts() {
     card.querySelector("h3").textContent = product.displayName || cleanProductName(product);
     card.querySelector(".sku").textContent = product.sku || "Jimms.fi product";
     renderProductDetails(card, product);
-    card.querySelector(".desc").textContent = product.description || categoryLabel(product.category);
+    card.querySelector(".desc").textContent = product.specs?.valueSummary || product.description || categoryLabel(product.category);
     card.querySelector(".stock").textContent = product.availability || "Availability on Jimms.fi";
     card.querySelector(".price").textContent = product.price;
     if (product.image) {
@@ -337,6 +337,10 @@ function updateCatalogMeta(total, label) {
 function getSpecValues(product) {
   const specs = product.specs || {};
   const values = [];
+  if (specs.valueLabel) values.push(specs.valueLabel);
+  if (specs.thermalLabel) values.push(specs.thermalLabel);
+  if (specs.targetResolution) values.push(specs.targetResolution);
+  if (specs.efficiencyTier) values.push(`${capitalize(specs.efficiencyTier)} efficiency`);
   if (specs.socket) values.push(specs.socket);
   if (specs.memoryType) values.push(specs.memoryType);
   if (specs.formFactor) values.push(specs.formFactor);
@@ -413,6 +417,10 @@ function applyProductFilters() {
 
   products.sort((a, b) => {
     switch (sortSelect.value) {
+      case "value-desc":
+        return (b.specs?.valueScore || 0) - (a.specs?.valueScore || 0)
+          || parseEuro(a.price) - parseEuro(b.price)
+          || a.name.localeCompare(b.name);
       case "price-asc":
         return parseEuro(a.price) - parseEuro(b.price);
       case "price-desc":
@@ -648,6 +656,10 @@ function renderSpecTags(card, product) {
   const specs = product.specs || {};
   const tags = [];
 
+  if (specs.valueLabel) tags.push(specs.valueLabel);
+  if (specs.thermalLabel) tags.push(specs.thermalLabel);
+  if (specs.targetResolution) tags.push(specs.targetResolution);
+  if (specs.efficiencyTier) tags.push(`${capitalize(specs.efficiencyTier)} efficiency`);
   if (specs.socket) tags.push(specs.socket);
   if (specs.memoryType) tags.push(specs.memoryType);
   if (specs.formFactor) tags.push(specs.formFactor);
@@ -759,6 +771,13 @@ function productDetailValues(product) {
   const values = [];
   const source = `${product.name || ""} ${product.description || ""}`;
 
+  if (specs.valueLabel && specs.valueScore) values.push(`${specs.valueLabel} (${specs.valueScore.toFixed(3)} perf/€)`);
+  if (specs.thermalLabel) values.push(specs.thermalLabel);
+  if (specs.targetResolution) values.push(`${specs.targetResolution} class`);
+  if (specs.efficiencyTier) values.push(`${capitalize(specs.efficiencyTier)} efficiency`);
+  if (specs.rayTracingIndex) values.push(`RT ${specs.rayTracingIndex}/100`);
+  if (specs.vramGb) values.push(`${specs.vramGb}GB VRAM`);
+  if (specs.boardPowerW) values.push(`${specs.boardPowerW}W board power`);
   if (specs.socket) values.push(specs.socket);
   if (specs.frequency) values.push(specs.frequency);
   if (specs.cores) values.push(specs.cores);
@@ -807,6 +826,11 @@ function productDetailValues(product) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function capitalize(value) {
+  const text = String(value || "");
+  return text ? text[0].toUpperCase() + text.slice(1) : "";
+}
+
 function formatRadiatorLocation(location) {
   return {
     front: "front",
@@ -841,6 +865,8 @@ function renderProductDetails(card, product) {
   values.slice(0, 7).forEach((value) => {
     const item = document.createElement("span");
     item.textContent = value;
+    if (/value/i.test(value)) item.dataset.tone = "value";
+    if (/thermals|cool-running|runs warm/i.test(value)) item.dataset.tone = "thermal";
     detailWrap.append(item);
   });
 }
