@@ -115,6 +115,21 @@ select {
   min-width: 0;
 }
 
+.auth-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.auth-summary {
+  max-width: 220px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.3;
+  text-align: right;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -370,6 +385,97 @@ h2 {
 
 .build-actions {
   margin-top: 14px;
+}
+
+.saved-builds-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.saved-builds-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-builds-head strong {
+  display: block;
+}
+
+.saved-builds-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.build-name-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.build-name-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 13px;
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.saved-builds-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.saved-builds-list {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-build-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card-soft-bg);
+}
+
+.saved-build-copy {
+  min-width: 0;
+}
+
+.saved-build-copy strong,
+.saved-build-copy span {
+  display: block;
+}
+
+.saved-build-copy strong {
+  overflow-wrap: anywhere;
+}
+
+.saved-build-copy span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.saved-build-row button {
+  min-width: 72px;
 }
 
 .jimms-cart-button {

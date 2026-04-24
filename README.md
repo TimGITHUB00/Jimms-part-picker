@@ -17,3 +17,4 @@ Open `http://localhost:4173`.
 - Category links open the relevant Jimms.fi pages for checkout and verification.
 - Game FPS estimates now come from a bundled local dataset in [data/local-benchmarks.json](C:/Users/timib/Documents/__projects/PCPARTPICKER_WESBITE_CLONE/data/local-benchmarks.json), seeded from public benchmark datasets so the feature works without any paid API.
 - GPU value and thermal guidance now comes from [data/gpu-market-data.json](C:/Users/timib/Documents/__projects/PCPARTPICKER_WESBITE_CLONE/data/gpu-market-data.json), then gets combined with live Jimms pricing to estimate price/performance tiers.
+- Google account login and account-backed saved builds require `GOOGLE_CLIENT_ID` to be set in the server environment for your Google Identity Services web client.

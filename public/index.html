@@ -16,6 +16,11 @@
         </span>
       </a>
       <div class="topbar-actions">
+        <div class="auth-panel">
+          <div class="auth-summary" id="authSummary">Guest mode</div>
+          <div id="googleSignin"></div>
+          <button class="ghost-button" id="signOutButton" type="button" hidden>Sign out</button>
+        </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" title="Toggle dark mode">Dark mode</button>
         <div class="source-pill" id="sourcePill">Jimms.fi source</div>
       </div>
@@ -30,6 +35,24 @@
           </div>
           <button class="ghost-button" id="clearBuild" type="button" title="Clear all selected parts">Clear</button>
         </div>
+
+        <section class="saved-builds-panel" aria-label="Saved builds">
+          <div class="saved-builds-head">
+            <div>
+              <strong>Saved Builds</strong>
+              <p id="savedBuildsStatus">Sign in with Google to save named builds to your account.</p>
+            </div>
+            <button class="ghost-button" id="newBuildButton" type="button">New</button>
+          </div>
+          <label class="build-name-field">
+            <span>Current build name</span>
+            <input id="buildNameInput" type="text" maxlength="80" placeholder="My 1440p build">
+          </label>
+          <div class="saved-builds-actions">
+            <button class="jimms-cart-button" id="saveBuildButton" type="button">Save Build</button>
+          </div>
+          <div class="saved-builds-list" id="savedBuildsList"></div>
+        </section>
 
         <div class="part-list" id="partList"></div>
 
@@ -144,6 +167,7 @@
       </article>
     </template>
 
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

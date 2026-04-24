@@ -1,4 +1,5 @@
 const http = require("http");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
@@ -8,7 +9,11 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const BENCHMARK_DATASET_PATH = path.join(DATA_DIR, "local-benchmarks.json");
 const GPU_MARKET_DATASET_PATH = path.join(DATA_DIR, "gpu-market-data.json");
+const USER_BUILDS_PATH = path.join(DATA_DIR, "user-builds.json");
 const JIMMS_BASE = "https://www.jimms.fi";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+const GOOGLE_ISSUERS = new Set(["accounts.google.com", "https://accounts.google.com"]);
 
 const categories = {
   cpu: { label: "CPU", group: "000-00R", url: "/fi/Product/List/000-00R" },
@@ -30,6 +35,7 @@ const pageSize = 100;
 const maxPagesPerCategory = 30;
 let localBenchmarkDatasetCache = null;
 let gpuMarketDatasetCache = null;
+let googleJwksCache = null;
 
 const fallbackProducts = {
   cpu: [
@@ -216,6 +222,158 @@ function parsePriceNumber(value) {
     .replace(/[^\d,.-]/g, "")
     .replace(/\./g, "")
     .replace(",", ".")) || 0;
+}
+
+function ensureDataFile(filePath, initialValue) {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify(initialValue, null, 2), "utf8");
+  }
+}
+
+function loadUserBuildStore() {
+  ensureDataFile(USER_BUILDS_PATH, { users: {} });
+  return JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
+}
+
+function saveUserBuildStore(store) {
+  ensureDataFile(USER_BUILDS_PATH, { users: {} });
+  fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
+}
+
+function toBase64UrlBuffer(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return Buffer.from(normalized + padding, "base64");
+}
+
+function decodeJwtPart(value) {
+  return JSON.parse(toBase64UrlBuffer(value).toString("utf8"));
+}
+
+async function fetchGoogleJwks() {
+  if (googleJwksCache && Date.now() < googleJwksCache.expiresAt) {
+    return googleJwksCache.keys;
+  }
+
+  const response = await fetch(GOOGLE_JWKS_URL, {
+    headers: {
+      "User-Agent": "JimmsPartPicker/1.0 (+local development)"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google JWK fetch failed with ${response.status}`);
+  }
+
+  const cacheControl = response.headers.get("cache-control") || "";
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+  const maxAgeMs = maxAgeMatch ? Number(maxAgeMatch[1]) * 1000 : 1000 * 60 * 60;
+  const body = await response.json();
+  googleJwksCache = {
+    keys: body.keys || [],
+    expiresAt: Date.now() + maxAgeMs
+  };
+
+  return googleJwksCache.keys;
+}
+
+async function verifyGoogleIdToken(idToken) {
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error("Google sign-in is not configured. Set GOOGLE_CLIENT_ID.");
+  }
+
+  const parts = String(idToken || "").split(".");
+  if (parts.length !== 3) {
+    throw new Error("Malformed Google ID token.");
+  }
+
+  const header = decodeJwtPart(parts[0]);
+  const payload = decodeJwtPart(parts[1]);
+  if (header.alg !== "RS256" || !header.kid) {
+    throw new Error("Unsupported Google ID token format.");
+  }
+
+  const keys = await fetchGoogleJwks();
+  const jwk = keys.find((entry) => entry.kid === header.kid);
+  if (!jwk) {
+    throw new Error("Google signing key not found for token.");
+  }
+
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${parts[0]}.${parts[1]}`);
+  verifier.end();
+  const isValid = verifier.verify(
+    crypto.createPublicKey({ key: jwk, format: "jwk" }),
+    toBase64UrlBuffer(parts[2])
+  );
+
+  if (!isValid) {
+    throw new Error("Google ID token signature is invalid.");
+  }
+
+  if (!GOOGLE_ISSUERS.has(payload.iss)) {
+    throw new Error("Google ID token issuer is invalid.");
+  }
+
+  if (payload.aud !== GOOGLE_CLIENT_ID) {
+    throw new Error("Google ID token audience does not match this app.");
+  }
+
+  if (!payload.exp || (Number(payload.exp) * 1000) <= Date.now()) {
+    throw new Error("Google ID token has expired.");
+  }
+
+  return {
+    sub: String(payload.sub),
+    email: payload.email || "",
+    name: payload.name || payload.email || "Google user",
+    picture: payload.picture || "",
+    emailVerified: Boolean(payload.email_verified)
+  };
+}
+
+async function getAuthenticatedUser(req) {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    throw new Error("Missing Google bearer token.");
+  }
+
+  return verifyGoogleIdToken(match[1]);
+}
+
+function buildRecordSummary(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    parts: record.parts || {},
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+}
+
+function getUserBuilds(store, user) {
+  if (!store.users[user.sub]) {
+    store.users[user.sub] = {
+      profile: {
+        email: user.email,
+        name: user.name,
+        picture: user.picture
+      },
+      builds: []
+    };
+  } else {
+    store.users[user.sub].profile = {
+      email: user.email,
+      name: user.name,
+      picture: user.picture
+    };
+  }
+
+  return store.users[user.sub].builds;
 }
 
 function normalizeSocket(value) {
@@ -1252,6 +1410,104 @@ function uniqueProducts(products) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (url.pathname === "/api/auth/google/config") {
+    sendJson(res, 200, {
+      enabled: Boolean(GOOGLE_CLIENT_ID),
+      clientId: GOOGLE_CLIENT_ID || ""
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/auth/google/verify" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const user = await verifyGoogleIdToken(body.credential || "");
+      sendJson(res, 200, {
+        ok: true,
+        user
+      });
+    } catch (error) {
+      sendJson(res, 401, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/user/builds") {
+    try {
+      const user = await getAuthenticatedUser(req);
+      const store = loadUserBuildStore();
+      const builds = getUserBuilds(store, user);
+
+      if (req.method === "GET") {
+        builds.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+        saveUserBuildStore(store);
+        sendJson(res, 200, {
+          ok: true,
+          user,
+          builds: builds.map(buildRecordSummary)
+        });
+        return;
+      }
+
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        const now = new Date().toISOString();
+        const name = String(body.name || "").trim() || "Untitled build";
+        const parts = body.parts && typeof body.parts === "object" ? body.parts : {};
+        const existing = builds.find((record) => record.id === body.id);
+
+        if (existing) {
+          existing.name = name;
+          existing.parts = parts;
+          existing.updatedAt = now;
+          saveUserBuildStore(store);
+          sendJson(res, 200, {
+            ok: true,
+            build: buildRecordSummary(existing)
+          });
+          return;
+        }
+
+        const record = {
+          id: crypto.randomUUID(),
+          name,
+          parts,
+          createdAt: now,
+          updatedAt: now
+        };
+        builds.unshift(record);
+        saveUserBuildStore(store);
+        sendJson(res, 200, {
+          ok: true,
+          build: buildRecordSummary(record)
+        });
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        const id = url.searchParams.get("id") || "";
+        const index = builds.findIndex((record) => record.id === id);
+        if (index >= 0) {
+          builds.splice(index, 1);
+          saveUserBuildStore(store);
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      sendJson(res, 405, { ok: false, message: "Method not allowed." });
+    } catch (error) {
+      sendJson(res, 401, {
+        ok: false,
+        message: error.message
+      });
+    }
+    return;
+  }
 
   if (url.pathname === "/api/categories") {
     sendJson(res, 200, { categories });
