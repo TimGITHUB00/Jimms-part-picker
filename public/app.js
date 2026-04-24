@@ -183,7 +183,7 @@ function renderSavedBuilds() {
   if (!state.auth.user) {
     savedBuildsStatus.textContent = state.auth.enabled
       ? "Sign in with Google to save named builds to your account."
-      : "Set GOOGLE_CLIENT_ID on the server to enable Google sign-in and account saves.";
+      : "Add your Google client ID to data/app-config.json to enable account saves.";
     saveBuildButton.disabled = true;
     savedBuildButtonLabel();
     savedBuildsList.innerHTML = `<div class="empty">Saved builds will appear here after you sign in.</div>`;
@@ -294,7 +294,7 @@ async function saveCurrentBuild() {
   if (!state.auth.user) {
     window.alert(state.auth.enabled
       ? "Sign in with Google first to save builds to your account."
-      : "Google sign-in is not configured on this server yet.");
+      : "Google sign-in is not configured yet. Add googleClientId to data/app-config.json.");
     return;
   }
 
@@ -324,7 +324,7 @@ async function saveCurrentBuild() {
 
 function renderAuthState() {
   if (!state.auth.enabled) {
-    authSummary.textContent = "Google login disabled";
+    authSummary.textContent = "Add googleClientId in data/app-config.json";
     googleSignin.innerHTML = "";
     signOutButton.hidden = true;
     return;

@@ -10,8 +10,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const BENCHMARK_DATASET_PATH = path.join(DATA_DIR, "local-benchmarks.json");
 const GPU_MARKET_DATASET_PATH = path.join(DATA_DIR, "gpu-market-data.json");
 const USER_BUILDS_PATH = path.join(DATA_DIR, "user-builds.json");
+const APP_CONFIG_PATH = path.join(DATA_DIR, "app-config.json");
 const JIMMS_BASE = "https://www.jimms.fi";
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS = new Set(["accounts.google.com", "https://accounts.google.com"]);
 
@@ -36,6 +36,7 @@ const maxPagesPerCategory = 30;
 let localBenchmarkDatasetCache = null;
 let gpuMarketDatasetCache = null;
 let googleJwksCache = null;
+let appConfigCache = null;
 
 const fallbackProducts = {
   cpu: [
@@ -238,6 +239,19 @@ function loadUserBuildStore() {
   return JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
 }
 
+function loadAppConfig() {
+  if (appConfigCache) return appConfigCache;
+  ensureDataFile(APP_CONFIG_PATH, {
+    googleClientId: ""
+  });
+  appConfigCache = JSON.parse(fs.readFileSync(APP_CONFIG_PATH, "utf8"));
+  return appConfigCache;
+}
+
+function getGoogleClientId() {
+  return process.env.GOOGLE_CLIENT_ID || loadAppConfig().googleClientId || "";
+}
+
 function saveUserBuildStore(store) {
   ensureDataFile(USER_BUILDS_PATH, { users: {} });
   fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
@@ -281,8 +295,9 @@ async function fetchGoogleJwks() {
 }
 
 async function verifyGoogleIdToken(idToken) {
-  if (!GOOGLE_CLIENT_ID) {
-    throw new Error("Google sign-in is not configured. Set GOOGLE_CLIENT_ID.");
+  const googleClientId = getGoogleClientId();
+  if (!googleClientId) {
+    throw new Error("Google sign-in is not configured. Set googleClientId in data/app-config.json.");
   }
 
   const parts = String(idToken || "").split(".");
@@ -318,7 +333,7 @@ async function verifyGoogleIdToken(idToken) {
     throw new Error("Google ID token issuer is invalid.");
   }
 
-  if (payload.aud !== GOOGLE_CLIENT_ID) {
+  if (payload.aud !== googleClientId) {
     throw new Error("Google ID token audience does not match this app.");
   }
 
@@ -1412,9 +1427,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === "/api/auth/google/config") {
+    const clientId = getGoogleClientId();
     sendJson(res, 200, {
-      enabled: Boolean(GOOGLE_CLIENT_ID),
-      clientId: GOOGLE_CLIENT_ID || ""
+      enabled: Boolean(clientId),
+      clientId: clientId || ""
     });
     return;
   }
