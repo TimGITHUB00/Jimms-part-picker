@@ -305,6 +305,18 @@ function setAuthStatus(message = "", tone = "") {
   }
 }
 
+function mailboxStatusText() {
+  if (!state.auth.user) return "";
+  const count = state.auth.mailbox.length;
+  if (count === 0) return "Inbox: 0 messages";
+  return `Inbox: ${count} message${count === 1 ? "" : "s"}`;
+}
+
+function focusInbox() {
+  accountMailbox.hidden = false;
+  accountMailbox.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function setResetMode(enabled) {
   resetForm.hidden = !enabled;
   if (!enabled) {
@@ -319,11 +331,17 @@ function renderMailbox() {
   mailboxList.innerHTML = "";
 
   if (!shouldShow) {
+    if (state.auth.user) {
+      setAuthStatus(mailboxStatusText(), "ok");
+    }
     return;
   }
 
   if (state.auth.mailbox.length === 0) {
     mailboxList.innerHTML = `<div class="empty">No inbox messages yet for this account.</div>`;
+    if (state.auth.user) {
+      setAuthStatus(mailboxStatusText(), "ok");
+    }
     return;
   }
 
@@ -343,6 +361,10 @@ function renderMailbox() {
     item.append(subject, meta, body);
     mailboxList.append(item);
   });
+
+  if (state.auth.user) {
+    setAuthStatus(mailboxStatusText(), "ok");
+  }
 }
 
 async function refreshMailboxPreview() {
@@ -517,6 +539,10 @@ async function submitLocalAuth(mode) {
   renderAuthState();
   renderMailbox();
   await fetchSavedBuilds();
+  await refreshMailboxPreview();
+  if (mode === "register") {
+    focusInbox();
+  }
 }
 
 async function requestPasswordReset() {
@@ -537,6 +563,7 @@ async function requestPasswordReset() {
   setResetMode(true);
   setAuthStatus(data.message || "Reset message sent.", "ok");
   renderMailbox();
+  focusInbox();
 }
 
 async function submitPasswordReset() {
@@ -566,6 +593,7 @@ async function submitPasswordReset() {
   setResetMode(false);
   setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
   renderMailbox();
+  focusInbox();
 }
 
 function parseEuro(price) {

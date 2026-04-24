@@ -21,19 +21,51 @@
       },
       "passwordHash": "7e9cfa05ca871104903969484a090a96:1354524a6b4c1662e57cc198f14c43718f676e552b33e32105f0348a03a65e02d1b5919a71bda09177b452e5615a857e3afdeb33a040117beeeea47092ff89c0",
       "builds": []
+    },
+    "local-aae800e6-1526-4a6e-b601-6fdddf3071e6": {
+      "profile": {
+        "email": "suomi.perkele@suomiperkele.fi",
+        "username": "suomiperkele",
+        "name": "suomiperkele",
+        "picture": "",
+        "authProvider": "local"
+      },
+      "passwordHash": "1864739df3560065ff1aa9dea02af0f0:23b284aca72f6cd2b3b43441b879f9550e74183e8502b0df404ce3a02009683442d85ac325a5ff170aeed939747f8b0210cba6b72e0e4cce627c5beade3098fd",
+      "builds": []
+    },
+    "local-9b560c17-dba0-4f31-8645-5a62188b413f": {
+      "profile": {
+        "email": "toinen.tyyppi@gmail.com",
+        "username": "ToinenTyyppi",
+        "name": "ToinenTyyppi",
+        "picture": "",
+        "authProvider": "local"
+      },
+      "passwordHash": "3e3c4a53bbb15be98ed45634dcac9d7e:d584a1f73addee9eb484811703a70a9319ae76ae895f730b57ac9ae4df4f3c1f89bfd06c0d5522b231a0243399404de549842c1d3a4f2c98833670b1c6cef2ca",
+      "builds": []
     }
   },
   "accountsByEmail": {
     "tiitimsan@gmail.com": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705",
-    "tiitimsan2@gmail.com": "local-22fadb64-3210-4bee-8224-3954d7c5e16a"
+    "tiitimsan2@gmail.com": "local-22fadb64-3210-4bee-8224-3954d7c5e16a",
+    "suomi.perkele@suomiperkele.fi": "local-aae800e6-1526-4a6e-b601-6fdddf3071e6",
+    "toinen.tyyppi@gmail.com": "local-9b560c17-dba0-4f31-8645-5a62188b413f"
   },
   "accountsByUsername": {
     "timjpp00": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705",
-    "timjpp00-2": "local-22fadb64-3210-4bee-8224-3954d7c5e16a"
+    "timjpp00-2": "local-22fadb64-3210-4bee-8224-3954d7c5e16a",
+    "suomiperkele": "local-aae800e6-1526-4a6e-b601-6fdddf3071e6",
+    "toinentyyppi": "local-9b560c17-dba0-4f31-8645-5a62188b413f"
   },
   "sessions": {},
   "mailboxByEmail": {
     "tiitimsan@gmail.com": [
+      {
+        "id": "13f1009b-7458-4a0b-a9c7-fe3d8dcb6d9c",
+        "subject": "Password reset instructions",
+        "body": "We received a password reset request for tiitimsan@gmail.com.\n\nYour reset code is: 163464\n\nThis code expires at 2026-04-24T19:32:40.884Z.\n\nIf you did not request this, you can ignore this message.",
+        "createdAt": "2026-04-24T19:12:40.884Z"
+      },
       {
         "id": "welcome-ti1",
         "subject": "Welcome to Jimms Part Picker",
@@ -48,7 +80,29 @@
         "body": "Hi TimJPP00-2,\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: TimJPP00-2\nEmail: tiitimsan2@gmail.com\n\nHave fun building.",
         "createdAt": "2026-04-24T19:10:00.000Z"
       }
+    ],
+    "suomi.perkele@suomiperkele.fi": [
+      {
+        "id": "655c9089-8f46-4cde-b6d3-6f553b8c8252",
+        "subject": "Welcome to Jimms Part Picker",
+        "body": "Hi suomiperkele,\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: suomiperkele\nEmail: suomi.perkele@suomiperkele.fi\n\nHave fun building.",
+        "createdAt": "2026-04-24T19:08:33.444Z"
+      }
+    ],
+    "toinen.tyyppi@gmail.com": [
+      {
+        "id": "827003ab-b209-4818-b6af-dc8681c3a825",
+        "subject": "Welcome to Jimms Part Picker",
+        "body": "Hi ToinenTyyppi,\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: ToinenTyyppi\nEmail: toinen.tyyppi@gmail.com\n\nHave fun building.",
+        "createdAt": "2026-04-24T19:11:51.481Z"
+      }
     ]
   },
-  "resetTokensByEmail": {}
+  "resetTokensByEmail": {
+    "tiitimsan@gmail.com": {
+      "userId": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705",
+      "code": "163464",
+      "expiresAt": "2026-04-24T19:32:40.884Z"
+    }
+  }
 }
