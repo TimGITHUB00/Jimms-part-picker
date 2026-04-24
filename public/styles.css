@@ -487,52 +487,6 @@ h2 {
   gap: 10px;
 }
 
-.account-mailbox {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  background: var(--card-soft-bg);
-}
-
-.mailbox-head {
-  align-items: start;
-}
-
-.mailbox-list {
-  display: grid;
-  gap: 8px;
-}
-
-.mailbox-item {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-.mailbox-item strong,
-.mailbox-item span,
-.mailbox-item p {
-  display: block;
-}
-
-.mailbox-item span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.mailbox-item p {
-  margin-top: 8px;
-  color: var(--ink);
-  font-size: 0.9rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .saved-builds-list {
   display: grid;
   gap: 8px;

@@ -1,3 +1,10 @@
 {
-  "googleClientId": ""
+  "googleClientId": "",
+  "smtpHost": "",
+  "smtpPort": 465,
+  "smtpSecure": true,
+  "smtpUser": "",
+  "smtpPass": "",
+  "smtpFrom": "",
+  "smtpFromName": "Jimms Part Picker"
 }

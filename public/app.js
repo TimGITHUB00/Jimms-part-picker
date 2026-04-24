@@ -38,8 +38,7 @@ const state = {
   savedBuilds: [],
   auth: {
     token: window.localStorage.getItem(AUTH_TOKEN_KEY) || "",
-    user: null,
-    mailbox: []
+    user: null
   },
   benchmarks: {
     status: "idle",
@@ -96,9 +95,6 @@ const resetCodeInput = document.querySelector("#resetCodeInput");
 const resetPasswordInput = document.querySelector("#resetPasswordInput");
 const resetPasswordButton = document.querySelector("#resetPasswordButton");
 const cancelResetButton = document.querySelector("#cancelResetButton");
-const accountMailbox = document.querySelector("#accountMailbox");
-const mailboxList = document.querySelector("#mailboxList");
-const refreshMailboxButton = document.querySelector("#refreshMailboxButton");
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -305,18 +301,6 @@ function setAuthStatus(message = "", tone = "") {
   }
 }
 
-function mailboxStatusText() {
-  if (!state.auth.user) return "";
-  const count = state.auth.mailbox.length;
-  if (count === 0) return "Inbox: 0 messages";
-  return `Inbox: ${count} message${count === 1 ? "" : "s"}`;
-}
-
-function focusInbox() {
-  accountMailbox.hidden = false;
-  accountMailbox.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 function setResetMode(enabled) {
   resetForm.hidden = !enabled;
   if (!enabled) {
@@ -325,81 +309,12 @@ function setResetMode(enabled) {
   }
 }
 
-function renderMailbox() {
-  const shouldShow = Boolean(state.auth.user) || state.auth.mailbox.length > 0;
-  accountMailbox.hidden = !shouldShow;
-  mailboxList.innerHTML = "";
-
-  if (!shouldShow) {
-    if (state.auth.user) {
-      setAuthStatus(mailboxStatusText(), "ok");
-    }
-    return;
-  }
-
-  if (state.auth.mailbox.length === 0) {
-    mailboxList.innerHTML = `<div class="empty">No inbox messages yet for this account.</div>`;
-    if (state.auth.user) {
-      setAuthStatus(mailboxStatusText(), "ok");
-    }
-    return;
-  }
-
-  state.auth.mailbox.forEach((message) => {
-    const item = document.createElement("article");
-    item.className = "mailbox-item";
-
-    const subject = document.createElement("strong");
-    subject.textContent = message.subject || "Message";
-
-    const meta = document.createElement("span");
-    meta.textContent = formatSavedBuildTime(message.createdAt);
-
-    const body = document.createElement("p");
-    body.textContent = message.body || "";
-
-    item.append(subject, meta, body);
-    mailboxList.append(item);
-  });
-
-  if (state.auth.user) {
-    setAuthStatus(mailboxStatusText(), "ok");
-  }
-}
-
-async function refreshMailboxPreview() {
-  const email = (state.auth.user?.email || accountEmailInput.value || "").trim();
-  if (!email) {
-    state.auth.mailbox = [];
-    renderMailbox();
-    setAuthStatus("Enter an email address to load inbox messages.", "warn");
-    return;
-  }
-
-  const response = await fetch(state.auth.user ? "/api/auth/local/mailbox" : "/api/auth/local/mailbox-preview", {
-    method: state.auth.user ? "GET" : "POST",
-    headers: state.auth.user
-      ? { ...authHeaders() }
-      : { "Content-Type": "application/json" },
-    body: state.auth.user ? undefined : JSON.stringify({ email })
-  });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "Could not load inbox messages.");
-  }
-
-  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
-  renderMailbox();
-}
-
 async function fetchSavedBuilds() {
   if (!state.auth.token) {
     state.auth.user = null;
-    state.auth.mailbox = [];
     state.savedBuilds = loadLocalSavedBuilds();
     renderSavedBuilds();
     renderAuthState();
-    renderMailbox();
     return;
   }
 
@@ -413,26 +328,15 @@ async function fetchSavedBuilds() {
     const data = await response.json();
     state.auth.user = data.user || null;
     state.savedBuilds = data.builds || [];
-    state.auth.mailbox = [];
   } catch (error) {
     state.auth.token = "";
     state.auth.user = null;
-    state.auth.mailbox = [];
     state.savedBuilds = loadLocalSavedBuilds();
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
   }
 
   renderAuthState();
   renderSavedBuilds();
-  if (state.auth.user) {
-    try {
-      await refreshMailboxPreview();
-    } catch (error) {
-      setAuthStatus(error.message || "Could not load inbox messages.", "warn");
-    }
-  } else {
-    renderMailbox();
-  }
 }
 
 async function saveCurrentBuild() {
@@ -531,18 +435,12 @@ async function submitLocalAuth(mode) {
 
   state.auth.token = data.token || "";
   state.auth.user = data.user || null;
-  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
   window.localStorage.setItem(AUTH_TOKEN_KEY, state.auth.token);
   accountPasswordInput.value = "";
   setResetMode(false);
   setAuthStatus(data.message || (mode === "register" ? "Account created." : "Signed in."), "ok");
   renderAuthState();
-  renderMailbox();
   await fetchSavedBuilds();
-  await refreshMailboxPreview();
-  if (mode === "register") {
-    focusInbox();
-  }
 }
 
 async function requestPasswordReset() {
@@ -559,11 +457,8 @@ async function requestPasswordReset() {
     throw new Error(data.message || "Could not start password reset.");
   }
 
-  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
   setResetMode(true);
   setAuthStatus(data.message || "Reset message sent.", "ok");
-  renderMailbox();
-  focusInbox();
 }
 
 async function submitPasswordReset() {
@@ -586,14 +481,11 @@ async function submitPasswordReset() {
     throw new Error(data.message || "Could not reset password.");
   }
 
-  state.auth.mailbox = Array.isArray(data.mailbox) ? data.mailbox : [];
   accountPasswordInput.value = "";
   resetPasswordInput.value = "";
   resetCodeInput.value = "";
   setResetMode(false);
   setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
-  renderMailbox();
-  focusInbox();
 }
 
 function parseEuro(price) {
@@ -1759,19 +1651,10 @@ cancelResetButton.addEventListener("click", () => {
   setResetMode(false);
   setAuthStatus("");
 });
-refreshMailboxButton.addEventListener("click", async () => {
-  try {
-    await refreshMailboxPreview();
-    setAuthStatus(state.auth.mailbox.length > 0 ? "Inbox refreshed." : "No local inbox messages yet for that email.", "ok");
-  } catch (error) {
-    setAuthStatus(error.message || "Could not load inbox messages.", "warn");
-  }
-});
 signOutButton.addEventListener("click", () => {
   const headers = authHeaders();
   state.auth.token = "";
   state.auth.user = null;
-  state.auth.mailbox = [];
   state.savedBuilds = loadLocalSavedBuilds();
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   fetch("/api/auth/local/logout", {
@@ -1782,7 +1665,6 @@ signOutButton.addEventListener("click", () => {
   setAuthStatus("Signed out.");
   renderAuthState();
   renderSavedBuilds();
-  renderMailbox();
 });
 
 applyTheme(getStoredTheme());

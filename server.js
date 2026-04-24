@@ -1,7 +1,10 @@
 const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
+const net = require("net");
+const os = require("os");
 const path = require("path");
+const tls = require("tls");
 const { URL } = require("url");
 
 const PORT = process.env.PORT || 4173;
@@ -288,7 +291,14 @@ function loadUserBuildStore() {
 function loadAppConfig() {
   if (appConfigCache) return appConfigCache;
   ensureDataFile(APP_CONFIG_PATH, {
-    googleClientId: ""
+    googleClientId: "",
+    smtpHost: "",
+    smtpPort: 465,
+    smtpSecure: true,
+    smtpUser: "",
+    smtpPass: "",
+    smtpFrom: "",
+    smtpFromName: "Jimms Part Picker"
   });
   appConfigCache = JSON.parse(fs.readFileSync(APP_CONFIG_PATH, "utf8"));
   return appConfigCache;
@@ -300,10 +310,24 @@ function getGoogleClientId() {
 
 function saveAppConfig(config) {
   ensureDataFile(APP_CONFIG_PATH, {
-    googleClientId: ""
+    googleClientId: "",
+    smtpHost: "",
+    smtpPort: 465,
+    smtpSecure: true,
+    smtpUser: "",
+    smtpPass: "",
+    smtpFrom: "",
+    smtpFromName: "Jimms Part Picker"
   });
   appConfigCache = {
-    googleClientId: String(config.googleClientId || "").trim()
+    googleClientId: String(config.googleClientId || "").trim(),
+    smtpHost: String(config.smtpHost || "").trim(),
+    smtpPort: Number(config.smtpPort) || 465,
+    smtpSecure: config.smtpSecure !== false,
+    smtpUser: String(config.smtpUser || "").trim(),
+    smtpPass: String(config.smtpPass || ""),
+    smtpFrom: String(config.smtpFrom || "").trim(),
+    smtpFromName: String(config.smtpFromName || "Jimms Part Picker").trim() || "Jimms Part Picker"
   };
   fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(appConfigCache, null, 2), "utf8");
 }
@@ -327,6 +351,80 @@ function sanitizeUsername(value) {
 
 function normalizeUsername(value) {
   return sanitizeUsername(value).toLowerCase();
+}
+
+function getEmailConfig() {
+  const config = loadAppConfig();
+  return {
+    host: String(process.env.SMTP_HOST || config.smtpHost || "").trim(),
+    port: Number(process.env.SMTP_PORT || config.smtpPort || 465),
+    secure: String(process.env.SMTP_SECURE || config.smtpSecure).toLowerCase() !== "false",
+    user: String(process.env.SMTP_USER || config.smtpUser || "").trim(),
+    pass: String(process.env.SMTP_PASS || config.smtpPass || ""),
+    from: String(process.env.SMTP_FROM || config.smtpFrom || "").trim(),
+    fromName: String(process.env.SMTP_FROM_NAME || config.smtpFromName || "Jimms Part Picker").trim() || "Jimms Part Picker"
+  };
+}
+
+function isEmailDeliveryConfigured() {
+  const config = getEmailConfig();
+  return Boolean(config.host && config.port && config.from);
+}
+
+function sanitizeHeader(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+function quotedAddress(name, email) {
+  const safeName = sanitizeHeader(name);
+  const safeEmail = sanitizeHeader(email);
+  return safeName ? `"${safeName.replace(/"/g, "'")}" <${safeEmail}>` : `<${safeEmail}>`;
+}
+
+function dotStuff(text) {
+  return String(text || "")
+    .replace(/\r?\n/g, "\r\n")
+    .replace(/^\./gm, "..");
+}
+
+function buildEmailMessage({ fromName, fromEmail, toEmail, subject, text }) {
+  const headers = [
+    `From: ${quotedAddress(fromName, fromEmail)}`,
+    `To: <${sanitizeHeader(toEmail)}>`,
+    `Subject: ${sanitizeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    `Date: ${new Date().toUTCString()}`
+  ];
+  return `${headers.join("\r\n")}\r\n\r\n${dotStuff(text)}\r\n.`;
+}
+
+function buildWelcomeEmail(username, email) {
+  return {
+    subject: "Welcome to Jimms Part Picker",
+    text: `Hi ${username},
+
+Your Jimms Part Picker account is ready.
+
+Username: ${username}
+Email: ${email}
+
+You can now sign in and save named builds to your account.`
+  };
+}
+
+function buildResetEmail(email, code, expiresAt) {
+  return {
+    subject: "Jimms Part Picker password reset",
+    text: `We received a password reset request for ${email}.
+
+Your reset code is: ${code}
+
+This code expires at ${expiresAt}.
+
+If you did not request this, you can ignore this email.`
+  };
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -374,6 +472,158 @@ function ensureWelcomeMailboxMessage(store, user) {
     `Hi ${user.username || user.name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: ${user.username || user.name}\nEmail: ${email}\n\nHave fun building.`
   );
   return true;
+}
+
+function createSmtpSession(config) {
+  return new Promise((resolve, reject) => {
+    const socket = config.secure
+      ? tls.connect({
+        host: config.host,
+        port: config.port,
+        servername: config.host
+      })
+      : net.createConnection({
+        host: config.host,
+        port: config.port
+      });
+
+    let buffer = "";
+    let closed = false;
+    const waiters = [];
+
+    function fail(error) {
+      if (closed) return;
+      closed = true;
+      while (waiters.length > 0) {
+        waiters.shift().reject(error);
+      }
+      socket.destroy();
+      reject(error);
+    }
+
+    function consume() {
+      while (waiters.length > 0) {
+        const response = readResponseFromBuffer();
+        if (!response) break;
+        waiters.shift().resolve(response);
+      }
+    }
+
+    function readResponseFromBuffer() {
+      const lines = buffer.split("\r\n");
+      if (lines.length < 2) return null;
+
+      const collected = [];
+      for (let index = 0; index < lines.length - 1; index += 1) {
+        const line = lines[index];
+        if (!/^\d{3}[ -]/.test(line)) return null;
+        collected.push(line);
+        if (/^\d{3} /.test(line)) {
+          buffer = lines.slice(index + 1).join("\r\n");
+          const code = Number(collected[collected.length - 1].slice(0, 3));
+          return {
+            code,
+            lines: collected,
+            text: collected.map((entry) => entry.slice(4)).join("\n")
+          };
+        }
+      }
+
+      return null;
+    }
+
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      consume();
+    });
+    socket.on("error", fail);
+    socket.on("close", () => {
+      if (!closed) {
+        fail(new Error("SMTP connection closed unexpectedly."));
+      }
+    });
+
+    const connectedEvent = config.secure ? "secureConnect" : "connect";
+    socket.once(connectedEvent, async () => {
+      try {
+        async function nextResponse() {
+          const ready = readResponseFromBuffer();
+          if (ready) return ready;
+          return await new Promise((resolveNext, rejectNext) => {
+            waiters.push({ resolve: resolveNext, reject: rejectNext });
+          });
+        }
+
+        async function expect(codePrefix, command, options = {}) {
+          if (command) {
+            socket.write(`${command}\r\n`);
+          }
+          const response = await nextResponse();
+          if (!String(response.code).startsWith(String(codePrefix))) {
+            const details = options.redactResponse ? "" : ` ${response.text}`.trimEnd();
+            throw new Error(`${options.label || "SMTP command"} failed with ${response.code}${details ? `: ${details}` : ""}`);
+          }
+          return response;
+        }
+
+        const greeting = await expect(220, null, { label: "SMTP greeting" });
+        void greeting;
+        await expect(250, `EHLO ${sanitizeHeader(os.hostname() || "localhost")}`, { label: "SMTP EHLO" });
+        if (config.user) {
+          const authPayload = Buffer.from(`\0${config.user}\0${config.pass}`, "utf8").toString("base64");
+          await expect(235, `AUTH PLAIN ${authPayload}`, { label: "SMTP AUTH", redactResponse: true });
+        }
+
+        resolve({
+          send: async ({ from, to, subject, text }) => {
+            await expect(250, `MAIL FROM:<${sanitizeHeader(from)}>`, { label: "SMTP MAIL FROM" });
+            await expect(250, `RCPT TO:<${sanitizeHeader(to)}>`, { label: "SMTP RCPT TO" });
+            await expect(354, "DATA", { label: "SMTP DATA" });
+            const message = buildEmailMessage({
+              fromName: config.fromName,
+              fromEmail: from,
+              toEmail: to,
+              subject,
+              text
+            });
+            socket.write(`${message}\r\n`);
+            await expect(250, null, { label: "SMTP message body" });
+          },
+          close: async () => {
+            if (closed) return;
+            closed = true;
+            try {
+              socket.write("QUIT\r\n");
+            } finally {
+              socket.end();
+            }
+          }
+        });
+      } catch (error) {
+        fail(error);
+      }
+    });
+  });
+}
+
+async function sendEmailMessage({ to, subject, text }) {
+  const config = getEmailConfig();
+  if (!isEmailDeliveryConfigured()) {
+    throw new Error("Email delivery is not configured. Set SMTP settings in data/app-config.json or SMTP_* environment variables.");
+  }
+
+  const session = await createSmtpSession(config);
+  try {
+    await session.send({
+      from: config.from,
+      to,
+      subject,
+      text
+    });
+  } finally {
+    await session.close();
+  }
 }
 
 function toBase64UrlBuffer(value) {
@@ -1658,15 +1908,25 @@ const server = http.createServer(async (req, res) => {
       };
       store.accountsByEmail[email] = userId;
       store.accountsByUsername[normalizeUsername(username)] = userId;
-      ensureWelcomeMailboxMessage(store, buildLocalUser(userId, store.users[userId]));
       const token = createLocalSession(store, userId);
+      let emailMessage = "Account created.";
+      try {
+        const welcomeEmail = buildWelcomeEmail(username, email);
+        await sendEmailMessage({
+          to: email,
+          subject: welcomeEmail.subject,
+          text: welcomeEmail.text
+        });
+        emailMessage = "Account created. A welcome email was sent.";
+      } catch (emailError) {
+        emailMessage = `Account created, but the welcome email could not be sent: ${emailError.message}`;
+      }
       saveUserBuildStore(store);
       sendJson(res, 200, {
         ok: true,
         token,
         user: buildLocalUser(userId, store.users[userId]),
-        mailbox: listMailboxMessages(store, email),
-        message: "Account created. A welcome message was delivered to your local inbox."
+        message: emailMessage
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -1692,14 +1952,12 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
-      ensureWelcomeMailboxMessage(store, buildLocalUser(userId, record));
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
       sendJson(res, 200, {
         ok: true,
         token,
         user: buildLocalUser(userId, record),
-        mailbox: listMailboxMessages(store, email),
         message: "Signed in."
       });
     } catch (error) {
@@ -1733,24 +1991,23 @@ const server = http.createServer(async (req, res) => {
       if (userId && store.users[userId]) {
         const code = String(Math.floor(100000 + Math.random() * 900000));
         const expiresAt = new Date(Date.now() + (1000 * 60 * 20)).toISOString();
+        const resetEmail = buildResetEmail(email, code, expiresAt);
+        await sendEmailMessage({
+          to: email,
+          subject: resetEmail.subject,
+          text: resetEmail.text
+        });
         store.resetTokensByEmail[email] = {
           userId,
           code,
           expiresAt
         };
-        appendMailboxMessage(
-          store,
-          email,
-          "Password reset instructions",
-          `We received a password reset request for ${email}.\n\nYour reset code is: ${code}\n\nThis code expires at ${expiresAt}.\n\nIf you did not request this, you can ignore this message.`
-        );
         saveUserBuildStore(store);
       }
 
       sendJson(res, 200, {
         ok: true,
-        message: "If that email exists, a password reset message has been delivered to the local inbox.",
-        mailbox: email ? listMailboxMessages(store, email) : []
+        message: "If that email exists, a password reset email has been sent."
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -1797,17 +2054,10 @@ const server = http.createServer(async (req, res) => {
 
       record.passwordHash = hashPassword(password);
       delete store.resetTokensByEmail[email];
-      appendMailboxMessage(
-        store,
-        email,
-        "Password updated",
-        `The password for ${email} was changed successfully.\n\nYou can now sign in with the new password.`
-      );
       saveUserBuildStore(store);
       sendJson(res, 200, {
         ok: true,
-        message: "Password updated. You can sign in now.",
-        mailbox: listMailboxMessages(store, email)
+        message: "Password updated. You can sign in now."
       });
     } catch (error) {
       sendJson(res, 400, {
