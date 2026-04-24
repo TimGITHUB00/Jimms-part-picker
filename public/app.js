@@ -99,6 +99,7 @@ const forgotPage = document.querySelector("#forgotPage");
 const registerUsernameInput = document.querySelector("#registerUsernameInput");
 const registerEmailInput = document.querySelector("#registerEmailInput");
 const registerPasswordInput = document.querySelector("#registerPasswordInput");
+const registerConfirmPasswordInput = document.querySelector("#registerConfirmPasswordInput");
 const loginEmailInput = document.querySelector("#loginEmailInput");
 const loginPasswordInput = document.querySelector("#loginPasswordInput");
 const forgotEmailInput = document.querySelector("#forgotEmailInput");
@@ -108,6 +109,7 @@ const requestResetButton = document.querySelector("#requestResetButton");
 const sendTestEmailButton = document.querySelector("#sendTestEmailButton");
 const resetCodeInput = document.querySelector("#resetCodeInput");
 const resetPasswordInput = document.querySelector("#resetPasswordInput");
+const resetConfirmPasswordInput = document.querySelector("#resetConfirmPasswordInput");
 const resetPasswordButton = document.querySelector("#resetPasswordButton");
 
 const authPageConfig = {
@@ -358,6 +360,7 @@ function closeAuthView() {
 function clearResetInputs() {
   resetCodeInput.value = "";
   resetPasswordInput.value = "";
+  resetConfirmPasswordInput.value = "";
 }
 
 async function fetchSavedBuilds() {
@@ -466,6 +469,9 @@ async function loadAuthConfig() {
 async function submitLocalAuth(mode) {
   const email = mode === "register" ? registerEmailInput.value.trim() : loginEmailInput.value.trim();
   const password = mode === "register" ? registerPasswordInput.value : loginPasswordInput.value;
+  if (mode === "register" && password !== registerConfirmPasswordInput.value) {
+    throw new Error("Passwords do not match.");
+  }
   const payload = {
     email,
     password
@@ -490,6 +496,7 @@ async function submitLocalAuth(mode) {
   state.auth.user = data.user || null;
   window.localStorage.setItem(AUTH_TOKEN_KEY, state.auth.token);
   registerPasswordInput.value = "";
+  registerConfirmPasswordInput.value = "";
   loginPasswordInput.value = "";
   clearResetInputs();
   syncAuthEmails(email);
@@ -521,6 +528,9 @@ async function submitPasswordReset() {
   const email = forgotEmailInput.value.trim();
   const code = resetCodeInput.value.trim();
   const password = resetPasswordInput.value;
+  if (password !== resetConfirmPasswordInput.value) {
+    throw new Error("Passwords do not match.");
+  }
   const response = await fetch("/api/auth/local/reset-password", {
     method: "POST",
     headers: {
@@ -539,6 +549,7 @@ async function submitPasswordReset() {
 
   loginPasswordInput.value = "";
   resetPasswordInput.value = "";
+  resetConfirmPasswordInput.value = "";
   resetCodeInput.value = "";
   syncAuthEmails(email);
   setAuthStatus(data.message || "Password updated. Sign in with the new password.", "ok");
