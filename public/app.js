@@ -25,6 +25,7 @@ const jimmsUrls = {
 const THEME_KEY = "jimms-part-picker-theme";
 const DRAFT_KEY = "jimms-part-picker-current-build";
 const GOOGLE_TOKEN_KEY = "jimms-part-picker-google-token";
+const LOCAL_SAVED_BUILDS_KEY = "jimms-part-picker-local-saved-builds";
 
 const state = {
   activeCategory: "cpu",
@@ -122,6 +123,21 @@ function persistCurrentBuild() {
   }));
 }
 
+function loadLocalSavedBuilds() {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_SAVED_BUILDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn("Could not load local saved builds", error);
+    return [];
+  }
+}
+
+function saveLocalSavedBuilds(builds) {
+  window.localStorage.setItem(LOCAL_SAVED_BUILDS_KEY, JSON.stringify(builds));
+}
+
 function restoreCurrentBuild() {
   const raw = window.localStorage.getItem(DRAFT_KEY);
   if (!raw) return;
@@ -182,20 +198,20 @@ function renderSavedBuilds() {
 
   if (!state.auth.user) {
     savedBuildsStatus.textContent = state.auth.enabled
-      ? "Sign in with Google to save named builds to your account."
-      : "Add your Google client ID to data/app-config.json to enable account saves.";
-    saveBuildButton.disabled = true;
+      ? "Save builds locally now, or sign in with Google to sync them to your account."
+      : "Google sync is optional. You can already save named builds locally on this device.";
+    saveBuildButton.disabled = false;
     savedBuildButtonLabel();
-    savedBuildsList.innerHTML = `<div class="empty">Saved builds will appear here after you sign in.</div>`;
-    return;
   }
 
-  savedBuildsStatus.textContent = `${state.auth.user.name} can save as many named builds as needed.`;
-  saveBuildButton.disabled = false;
-  savedBuildButtonLabel();
+  if (state.auth.user) {
+    savedBuildsStatus.textContent = `${state.auth.user.name} can save as many named builds as needed.`;
+    saveBuildButton.disabled = false;
+    savedBuildButtonLabel();
+  }
 
   if (state.savedBuilds.length === 0) {
-    savedBuildsList.innerHTML = `<div class="empty">No saved builds yet for this account.</div>`;
+    savedBuildsList.innerHTML = `<div class="empty">${state.auth.user ? "No saved builds yet for this account." : "No local saved builds yet on this device."}</div>`;
     return;
   }
 
@@ -233,14 +249,19 @@ function renderSavedBuilds() {
     deleteButton.textContent = "Delete";
     deleteButton.addEventListener("click", async () => {
       try {
-        const response = await fetch(`/api/user/builds?id=${encodeURIComponent(build.id)}`, {
-          method: "DELETE",
-          headers: {
-            ...authHeaders()
-          }
-        });
-        if (!response.ok) throw new Error("Delete failed");
-        state.savedBuilds = state.savedBuilds.filter((entry) => entry.id !== build.id);
+        if (state.auth.user) {
+          const response = await fetch(`/api/user/builds?id=${encodeURIComponent(build.id)}`, {
+            method: "DELETE",
+            headers: {
+              ...authHeaders()
+            }
+          });
+          if (!response.ok) throw new Error("Delete failed");
+          state.savedBuilds = state.savedBuilds.filter((entry) => entry.id !== build.id);
+        } else {
+          state.savedBuilds = state.savedBuilds.filter((entry) => entry.id !== build.id);
+          saveLocalSavedBuilds(state.savedBuilds);
+        }
         if (state.currentBuildId === build.id) {
           state.currentBuildId = null;
           persistCurrentBuild();
@@ -263,7 +284,7 @@ function savedBuildButtonLabel() {
 async function fetchSavedBuilds() {
   if (!state.auth.token) {
     state.auth.user = null;
-    state.savedBuilds = [];
+    state.savedBuilds = loadLocalSavedBuilds();
     renderSavedBuilds();
     renderAuthState();
     return;
@@ -282,7 +303,7 @@ async function fetchSavedBuilds() {
   } catch (error) {
     state.auth.token = "";
     state.auth.user = null;
-    state.savedBuilds = [];
+    state.savedBuilds = loadLocalSavedBuilds();
     window.localStorage.removeItem(GOOGLE_TOKEN_KEY);
   }
 
@@ -292,9 +313,26 @@ async function fetchSavedBuilds() {
 
 async function saveCurrentBuild() {
   if (!state.auth.user) {
-    window.alert(state.auth.enabled
-      ? "Sign in with Google first to save builds to your account."
-      : "Google sign-in is not configured yet. Add googleClientId to data/app-config.json.");
+    const now = new Date().toISOString();
+    const existing = state.savedBuilds.find((build) => build.id === state.currentBuildId);
+    if (existing) {
+      existing.name = state.currentBuildName;
+      existing.parts = state.selected;
+      existing.updatedAt = now;
+    } else {
+      const record = {
+        id: state.currentBuildId || `local-${Date.now()}`,
+        name: state.currentBuildName,
+        parts: state.selected,
+        createdAt: now,
+        updatedAt: now
+      };
+      state.currentBuildId = record.id;
+      state.savedBuilds.unshift(record);
+    }
+    saveLocalSavedBuilds(state.savedBuilds);
+    persistCurrentBuild();
+    renderSavedBuilds();
     return;
   }
 
@@ -324,7 +362,7 @@ async function saveCurrentBuild() {
 
 function renderAuthState() {
   if (!state.auth.enabled) {
-    authSummary.textContent = "Add googleClientId in data/app-config.json";
+    authSummary.textContent = "Local saves enabled";
     googleSignin.innerHTML = "";
     signOutButton.hidden = true;
     return;
@@ -1546,7 +1584,7 @@ newBuildButton.addEventListener("click", () => {
 signOutButton.addEventListener("click", () => {
   state.auth.token = "";
   state.auth.user = null;
-  state.savedBuilds = [];
+  state.savedBuilds = loadLocalSavedBuilds();
   window.localStorage.removeItem(GOOGLE_TOKEN_KEY);
   renderAuthState();
   renderSavedBuilds();
