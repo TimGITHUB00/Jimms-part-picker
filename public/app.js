@@ -219,7 +219,7 @@ function renderSavedBuilds() {
   }
 
   if (state.auth.user) {
-    savedBuildsStatus.textContent = `${state.auth.user.name} can save as many named builds as needed.`;
+    savedBuildsStatus.textContent = `${state.auth.user.username || state.auth.user.name} can save as many named builds as needed.`;
     saveBuildButton.disabled = false;
     savedBuildButtonLabel();
   }
@@ -314,11 +314,16 @@ function setResetMode(enabled) {
 }
 
 function renderMailbox() {
-  const shouldShow = state.auth.mailbox.length > 0;
+  const shouldShow = Boolean(state.auth.user) || state.auth.mailbox.length > 0;
   accountMailbox.hidden = !shouldShow;
   mailboxList.innerHTML = "";
 
   if (!shouldShow) {
+    return;
+  }
+
+  if (state.auth.mailbox.length === 0) {
+    mailboxList.innerHTML = `<div class="empty">No inbox messages yet for this account.</div>`;
     return;
   }
 
@@ -459,7 +464,7 @@ async function saveCurrentBuild() {
 
 function renderAuthState() {
   if (state.auth.user) {
-    authSummary.textContent = `${state.auth.user.name} (${state.auth.user.email})`;
+    authSummary.textContent = `${state.auth.user.username || state.auth.user.name} (${state.auth.user.email})`;
     signOutButton.hidden = false;
     authForm.hidden = true;
     setResetMode(false);
@@ -487,7 +492,7 @@ async function submitLocalAuth(mode) {
     password
   };
   if (mode === "register") {
-    payload.name = accountNameInput.value.trim();
+    payload.username = accountNameInput.value.trim();
   }
 
   const response = await fetch(`/api/auth/local/${mode}`, {

@@ -3,18 +3,52 @@
     "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705": {
       "profile": {
         "email": "tiitimsan@gmail.com",
+        "username": "TimJPP00",
         "name": "TimJPP00",
         "picture": "",
         "authProvider": "local"
       },
       "passwordHash": "2e97a6ad24ea0abe5bd5683ac81fd666:53e725ed6acacb90e4d3b5a4bc2c521aa4f14a5bb7e0290b8610b1e5cd2b4f6ec61a2b1d8c8c036e18f812009e49ed33237d2835f720c3b52f4cf398102f7f71",
       "builds": []
+    },
+    "local-22fadb64-3210-4bee-8224-3954d7c5e16a": {
+      "profile": {
+        "email": "tiitimsan2@gmail.com",
+        "username": "TimJPP00-2",
+        "name": "TimJPP00-2",
+        "picture": "",
+        "authProvider": "local"
+      },
+      "passwordHash": "7e9cfa05ca871104903969484a090a96:1354524a6b4c1662e57cc198f14c43718f676e552b33e32105f0348a03a65e02d1b5919a71bda09177b452e5615a857e3afdeb33a040117beeeea47092ff89c0",
+      "builds": []
     }
   },
   "accountsByEmail": {
-    "tiitimsan@gmail.com": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705"
+    "tiitimsan@gmail.com": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705",
+    "tiitimsan2@gmail.com": "local-22fadb64-3210-4bee-8224-3954d7c5e16a"
+  },
+  "accountsByUsername": {
+    "timjpp00": "local-58ff8b6b-2faf-45f4-a7d7-80d349b64705",
+    "timjpp00-2": "local-22fadb64-3210-4bee-8224-3954d7c5e16a"
   },
   "sessions": {},
-  "mailboxByEmail": {},
+  "mailboxByEmail": {
+    "tiitimsan@gmail.com": [
+      {
+        "id": "welcome-ti1",
+        "subject": "Welcome to Jimms Part Picker",
+        "body": "Hi TimJPP00,\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: TimJPP00\nEmail: tiitimsan@gmail.com\n\nHave fun building.",
+        "createdAt": "2026-04-24T19:10:00.000Z"
+      }
+    ],
+    "tiitimsan2@gmail.com": [
+      {
+        "id": "welcome-ti2",
+        "subject": "Welcome to Jimms Part Picker",
+        "body": "Hi TimJPP00-2,\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: TimJPP00-2\nEmail: tiitimsan2@gmail.com\n\nHave fun building.",
+        "createdAt": "2026-04-24T19:10:00.000Z"
+      }
+    ]
+  },
   "resetTokensByEmail": {}
 }

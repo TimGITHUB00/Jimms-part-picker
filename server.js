@@ -235,13 +235,53 @@ function ensureDataFile(filePath, initialValue) {
 }
 
 function loadUserBuildStore() {
-  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, accountsByUsername: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
   const store = JSON.parse(fs.readFileSync(USER_BUILDS_PATH, "utf8"));
   store.users = store.users || {};
   store.accountsByEmail = store.accountsByEmail || {};
+  store.accountsByUsername = store.accountsByUsername || {};
   store.sessions = store.sessions || {};
   store.mailboxByEmail = store.mailboxByEmail || {};
   store.resetTokensByEmail = store.resetTokensByEmail || {};
+  let changed = false;
+  const usernameMap = {};
+
+  Object.entries(store.users).forEach(([userId, record]) => {
+    record.profile = record.profile || {};
+    const email = normalizeEmail(record.profile.email || "");
+    if (email && store.accountsByEmail[email] !== userId) {
+      store.accountsByEmail[email] = userId;
+      changed = true;
+    }
+
+    let username = sanitizeUsername(record.profile.username || record.profile.name || email.split("@")[0] || `user-${userId.slice(-6)}`);
+    let uniqueUsername = username;
+    let suffix = 2;
+    while (usernameMap[uniqueUsername] && usernameMap[uniqueUsername] !== userId) {
+      uniqueUsername = `${username}-${suffix}`;
+      suffix += 1;
+    }
+
+    if (record.profile.username !== uniqueUsername || record.profile.name !== uniqueUsername) {
+      record.profile.username = uniqueUsername;
+      record.profile.name = uniqueUsername;
+      changed = true;
+    }
+
+    usernameMap[uniqueUsername] = userId;
+    if (store.accountsByUsername[uniqueUsername.toLowerCase()] !== userId) {
+      store.accountsByUsername[uniqueUsername.toLowerCase()] = userId;
+      changed = true;
+    }
+
+    if (email && ensureWelcomeMailboxMessage(store, buildLocalUser(userId, record))) {
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveUserBuildStore(store);
+  }
   return store;
 }
 
@@ -269,12 +309,24 @@ function saveAppConfig(config) {
 }
 
 function saveUserBuildStore(store) {
-  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
+  ensureDataFile(USER_BUILDS_PATH, { users: {}, accountsByEmail: {}, accountsByUsername: {}, sessions: {}, mailboxByEmail: {}, resetTokensByEmail: {} });
   fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
 }
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function sanitizeUsername(value) {
+  const cleaned = String(value || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[^a-zA-Z0-9_.-]/g, "");
+  return cleaned || "user";
+}
+
+function normalizeUsername(value) {
+  return sanitizeUsername(value).toLowerCase();
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -306,6 +358,22 @@ function appendMailboxMessage(store, email, subject, body) {
 
 function listMailboxMessages(store, email) {
   return [...(store.mailboxByEmail[normalizeEmail(email)] || [])];
+}
+
+function ensureWelcomeMailboxMessage(store, user) {
+  const email = normalizeEmail(user.email);
+  if (!email || user.authProvider !== "local") return false;
+  const existing = listMailboxMessages(store, email);
+  if (existing.some((message) => message.subject === "Welcome to Jimms Part Picker")) {
+    return false;
+  }
+  appendMailboxMessage(
+    store,
+    email,
+    "Welcome to Jimms Part Picker",
+    `Hi ${user.username || user.name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: ${user.username || user.name}\nEmail: ${email}\n\nHave fun building.`
+  );
+  return true;
 }
 
 function toBase64UrlBuffer(value) {
@@ -415,7 +483,8 @@ function buildLocalUser(userId, record) {
   return {
     sub: userId,
     email: record.profile?.email || "",
-    name: record.profile?.name || record.profile?.email || "User",
+    username: record.profile?.username || record.profile?.name || record.profile?.email || "User",
+    name: record.profile?.username || record.profile?.name || record.profile?.email || "User",
     picture: record.profile?.picture || "",
     emailVerified: true,
     authProvider: "local"
@@ -458,6 +527,7 @@ function getUserBuilds(store, user) {
     store.users[user.sub] = {
       profile: {
         email: user.email,
+        username: user.username || user.name,
         name: user.name,
         picture: user.picture,
         authProvider: user.authProvider || "google"
@@ -467,6 +537,7 @@ function getUserBuilds(store, user) {
   } else {
     store.users[user.sub].profile = {
       email: user.email,
+      username: user.username || store.users[user.sub].profile?.username || user.name,
       name: user.name,
       picture: user.picture,
       authProvider: user.authProvider || store.users[user.sub].profile?.authProvider || "google"
@@ -1546,9 +1617,12 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const email = normalizeEmail(body.email);
       const password = String(body.password || "");
-      const name = String(body.name || "").trim() || email;
+      const username = sanitizeUsername(body.username || body.name || email.split("@")[0] || "");
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new Error("Enter a valid email address.");
+      }
+      if (username.length < 3) {
+        throw new Error("Username must be at least 3 characters.");
       }
       if (password.length < 6) {
         throw new Error("Password must be at least 6 characters.");
@@ -1562,12 +1636,20 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
+      if (store.accountsByUsername[normalizeUsername(username)]) {
+        sendJson(res, 409, {
+          ok: false,
+          message: "That username is already taken."
+        });
+        return;
+      }
 
       const userId = `local-${crypto.randomUUID()}`;
       store.users[userId] = {
         profile: {
           email,
-          name,
+          username,
+          name: username,
           picture: "",
           authProvider: "local"
         },
@@ -1575,12 +1657,8 @@ const server = http.createServer(async (req, res) => {
         builds: []
       };
       store.accountsByEmail[email] = userId;
-      appendMailboxMessage(
-        store,
-        email,
-        "Welcome to Jimms Part Picker",
-        `Hi ${name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: ${name}\nEmail: ${email}\n\nHave fun building.`
-      );
+      store.accountsByUsername[normalizeUsername(username)] = userId;
+      ensureWelcomeMailboxMessage(store, buildLocalUser(userId, store.users[userId]));
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
       sendJson(res, 200, {
@@ -1614,6 +1692,7 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
+      ensureWelcomeMailboxMessage(store, buildLocalUser(userId, record));
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
       sendJson(res, 200, {
@@ -1743,6 +1822,8 @@ const server = http.createServer(async (req, res) => {
     try {
       const user = await getAuthenticatedUser(req);
       const store = loadUserBuildStore();
+      ensureWelcomeMailboxMessage(store, user);
+      saveUserBuildStore(store);
       sendJson(res, 200, {
         ok: true,
         mailbox: listMailboxMessages(store, user.email)
@@ -1764,6 +1845,11 @@ const server = http.createServer(async (req, res) => {
         throw new Error("Enter the email address first.");
       }
       const store = loadUserBuildStore();
+      const userId = store.accountsByEmail[email];
+      if (userId && store.users[userId]) {
+        ensureWelcomeMailboxMessage(store, buildLocalUser(userId, store.users[userId]));
+        saveUserBuildStore(store);
+      }
       sendJson(res, 200, {
         ok: true,
         mailbox: listMailboxMessages(store, email)
