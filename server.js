@@ -252,6 +252,16 @@ function getGoogleClientId() {
   return process.env.GOOGLE_CLIENT_ID || loadAppConfig().googleClientId || "";
 }
 
+function saveAppConfig(config) {
+  ensureDataFile(APP_CONFIG_PATH, {
+    googleClientId: ""
+  });
+  appConfigCache = {
+    googleClientId: String(config.googleClientId || "").trim()
+  };
+  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(appConfigCache, null, 2), "utf8");
+}
+
 function saveUserBuildStore(store) {
   ensureDataFile(USER_BUILDS_PATH, { users: {} });
   fs.writeFileSync(USER_BUILDS_PATH, JSON.stringify(store, null, 2), "utf8");
@@ -1427,6 +1437,27 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === "/api/auth/google/config") {
+    if (req.method === "POST") {
+      try {
+        const body = await readJsonBody(req);
+        saveAppConfig({
+          googleClientId: body.googleClientId || ""
+        });
+        const clientId = getGoogleClientId();
+        sendJson(res, 200, {
+          ok: true,
+          enabled: Boolean(clientId),
+          clientId: clientId || ""
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          message: error.message
+        });
+      }
+      return;
+    }
+
     const clientId = getGoogleClientId();
     sendJson(res, 200, {
       enabled: Boolean(clientId),

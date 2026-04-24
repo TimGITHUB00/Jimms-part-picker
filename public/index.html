@@ -44,6 +44,15 @@
             </div>
             <button class="ghost-button" id="newBuildButton" type="button">New</button>
           </div>
+          <div class="google-setup" id="googleSetup" hidden>
+            <label class="build-name-field">
+              <span>Google Client ID</span>
+              <input id="googleClientIdInput" type="text" placeholder="1234567890-abc123.apps.googleusercontent.com">
+            </label>
+            <div class="saved-builds-actions">
+              <button class="ghost-button" id="saveGoogleConfigButton" type="button">Enable Google Sign-In</button>
+            </div>
+          </div>
           <label class="build-name-field">
             <span>Current build name</span>
             <input id="buildNameInput" type="text" maxlength="80" placeholder="My 1440p build">

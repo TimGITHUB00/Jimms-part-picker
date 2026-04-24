@@ -85,6 +85,9 @@ const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
 const newBuildButton = document.querySelector("#newBuildButton");
 const savedBuildsList = document.querySelector("#savedBuildsList");
+const googleSetup = document.querySelector("#googleSetup");
+const googleClientIdInput = document.querySelector("#googleClientIdInput");
+const saveGoogleConfigButton = document.querySelector("#saveGoogleConfigButton");
 
 function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
@@ -371,6 +374,8 @@ function renderAuthState() {
     authSummary.textContent = "Local saves enabled";
     googleSignin.innerHTML = "";
     signOutButton.hidden = true;
+    googleSetup.hidden = false;
+    googleClientIdInput.value = state.auth.clientId || "";
     return;
   }
 
@@ -378,11 +383,14 @@ function renderAuthState() {
     authSummary.textContent = `${state.auth.user.name} (${state.auth.user.email})`;
     googleSignin.innerHTML = "";
     signOutButton.hidden = false;
+    googleSetup.hidden = true;
     return;
   }
 
   authSummary.textContent = "Guest mode";
   signOutButton.hidden = true;
+  googleSetup.hidden = false;
+  googleClientIdInput.value = state.auth.clientId || "";
 }
 
 async function handleGoogleCredential(response) {
@@ -454,6 +462,29 @@ async function loadAuthConfig() {
   renderSavedBuilds();
   scheduleGoogleButtonRender();
   await fetchSavedBuilds();
+}
+
+async function saveGoogleClientId() {
+  const value = googleClientIdInput.value.trim();
+  const response = await fetch("/api/auth/google/config", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      googleClientId: value
+    })
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "Could not save Google client ID.");
+  }
+
+  state.auth.clientId = data.clientId || "";
+  state.auth.enabled = Boolean(data.enabled && data.clientId);
+  renderAuthState();
+  renderSavedBuilds();
+  scheduleGoogleButtonRender();
 }
 
 function parseEuro(price) {
@@ -1586,6 +1617,13 @@ saveBuildButton.addEventListener("click", async () => {
 newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
+});
+saveGoogleConfigButton.addEventListener("click", async () => {
+  try {
+    await saveGoogleClientId();
+  } catch (error) {
+    window.alert(error.message || "Could not enable Google sign-in.");
+  }
 });
 signOutButton.addEventListener("click", () => {
   state.auth.token = "";
