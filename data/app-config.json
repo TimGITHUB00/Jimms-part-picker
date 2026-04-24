@@ -1,10 +1,10 @@
 {
   "googleClientId": "",
-  "smtpHost": "",
+  "smtpHost": "mail.suomiperkele.fi",
   "smtpPort": 465,
   "smtpSecure": true,
-  "smtpUser": "",
-  "smtpPass": "",
-  "smtpFrom": "",
+  "smtpUser": "admin.jpp@suomiperkele.fi",
+  "smtpPass": "JimmsPartEmail191200!?",
+  "smtpFrom": "admin.jpp@suomiperkele.fi",
   "smtpFromName": "Jimms Part Picker"
 }
