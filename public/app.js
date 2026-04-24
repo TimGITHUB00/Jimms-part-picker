@@ -497,7 +497,9 @@ function renderBenchmarks() {
         const meta = document.createElement("span");
         meta.textContent = `${row.resolution} ${row.setting}`;
         const fps = document.createElement("strong");
-        fps.textContent = `${Math.round(row.fps)} FPS`;
+        fps.textContent = row.min1Fps
+          ? `${Math.round(row.fps)} FPS avg / ${Math.round(row.min1Fps)} 1% low`
+          : `${Math.round(row.fps)} FPS`;
         item.append(meta, fps);
         grid.append(item);
       });
@@ -528,13 +530,13 @@ async function loadBenchmarks() {
   state.benchmarks = {
     status: "loading",
     key,
-    note: "Loading UL Benchmarks FPS estimates...",
+    note: "Loading HowManyFPS game FPS estimates...",
     rows: []
   };
   renderBenchmarks();
 
   try {
-    const response = await fetch("/api/ul-benchmarks", {
+    const response = await fetch("/api/game-benchmarks", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -549,16 +551,16 @@ async function loadBenchmarks() {
       key,
       note: data.configured
         ? (data.rows?.length
-          ? `Estimated FPS from UL Benchmarks for matched CPU/GPU hardware.`
-          : data.message || "UL Benchmarks returned no FPS rows for the current build.")
-        : "UL Benchmarks API credentials are not configured on this app yet.",
+          ? `Estimated FPS from ${data.provider || "HowManyFPS"} for matched CPU/GPU hardware.`
+          : data.message || `${data.provider || "HowManyFPS"} returned no FPS rows for the current build.`)
+        : `${data.provider || "HowManyFPS"} API credentials are not configured on this app yet.`,
       rows: data.rows || []
     };
   } catch (error) {
     state.benchmarks = {
       status: "error",
       key,
-      note: "Could not load UL Benchmarks estimates right now.",
+      note: "Could not load game FPS estimates right now.",
       rows: []
     };
   }

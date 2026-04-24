@@ -1,15 +1,14 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const { URL } = require("url");
 
 const PORT = process.env.PORT || 4173;
 const PUBLIC_DIR = path.join(__dirname, "public");
 const JIMMS_BASE = "https://www.jimms.fi";
-const UL_API_BASE = process.env.UL_API_BASE || "https://ul-benchmarks.appspot.com/api";
-const UL_API_KEY = process.env.UL_API_KEY || "";
-const UL_API_SECRET = process.env.UL_API_SECRET || "";
+const HOWMANYFPS_API_BASE = process.env.HOWMANYFPS_API_BASE || "https://api.howmanyfps.com";
+const HOWMANYFPS_API_KEY = process.env.HOWMANYFPS_API_KEY || "";
+const HOWMANYFPS_AUTH_HEADER = process.env.HOWMANYFPS_AUTH_HEADER || "";
 
 const categories = {
   cpu: { label: "CPU", group: "000-00R", url: "/fi/Product/List/000-00R" },
@@ -26,21 +25,18 @@ const categories = {
 const cache = new Map();
 const detailCache = new Map();
 const cartLinkCache = new Map();
-const ulCache = new Map();
+const howManyFpsCache = new Map();
 const cacheMs = 1000 * 60 * 12;
 const pageSize = 100;
 const maxPagesPerCategory = 30;
-const ulPopularGames = [
+const popularBenchmarkGames = [
   "Counter-Strike 2",
   "Cyberpunk 2077",
   "Fortnite",
-  "Call of Duty: Black Ops 6",
+  "Valorant",
   "Marvel Rivals",
-  "Monster Hunter Wilds",
-  "Black Myth: Wukong",
-  "Hogwarts Legacy",
   "GTA V",
-  "Valorant"
+  "Apex Legends"
 ];
 
 const fallbackProducts = {
@@ -194,48 +190,43 @@ function textFromHtml(html) {
   return stripHtml(html).join("\n");
 }
 
-function hasUlApiConfig() {
-  return Boolean(UL_API_KEY && UL_API_SECRET);
+function hasHowManyFpsConfig() {
+  return Boolean(HOWMANYFPS_API_KEY || HOWMANYFPS_AUTH_HEADER);
 }
 
-function getUlAuthHeaders(method, requestUrl) {
-  const nonce = Math.floor(Date.now() / 1000).toString();
-  const uri = new URL(requestUrl);
-  const signatureString = `(request-target): ${method.toLowerCase()} ${uri.pathname} date: ${nonce}`.toLowerCase();
-  const signature = crypto.createHmac("sha1", UL_API_SECRET).update(signatureString).digest("hex");
-  return {
-    authorization: `Signature keyId="${UL_API_KEY}",algorithm="hmac-sha1",headers="(request-target) date",nonce="${nonce}",signature="${signature}"`,
-    "x-api-key": UL_API_KEY,
-    date: nonce,
-    accept: "application/json"
-  };
-}
-
-async function ulFetch(pathname, options = {}) {
-  if (!hasUlApiConfig()) {
-    throw new Error("UL Benchmarks API is not configured.");
+async function howManyFpsFetch(pathname, options = {}) {
+  if (!hasHowManyFpsConfig()) {
+    throw new Error("HowManyFPS API is not configured.");
   }
 
-  const requestUrl = new URL(pathname, UL_API_BASE).toString();
-  const method = options.method || "GET";
+  const requestUrl = new URL(pathname, HOWMANYFPS_API_BASE).toString();
   const headers = {
-    ...getUlAuthHeaders(method, requestUrl),
+    accept: "application/json",
     ...(options.headers || {})
   };
+
+  if (HOWMANYFPS_API_KEY) {
+    headers["x-api-key"] = HOWMANYFPS_API_KEY;
+    headers.authorization = headers.authorization || `Bearer ${HOWMANYFPS_API_KEY}`;
+  }
+
+  if (HOWMANYFPS_AUTH_HEADER) {
+    headers.authorization = HOWMANYFPS_AUTH_HEADER;
+  }
+
   const response = await fetch(requestUrl, {
     ...options,
-    method,
     headers
   });
 
   if (!response.ok) {
-    throw new Error(`UL Benchmarks returned ${response.status}`);
+    throw new Error(`HowManyFPS returned ${response.status}`);
   }
 
   return response.json();
 }
 
-function normalizeUlText(value) {
+function normalizeBenchmarkText(value) {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
@@ -731,85 +722,16 @@ function estimateGpuWatts(text) {
   return match ? match[1] : 0;
 }
 
-function getUlCache(key) {
-  const cached = ulCache.get(key);
+function getHowManyFpsCache(key) {
+  const cached = howManyFpsCache.get(key);
   if (cached && Date.now() - cached.createdAt < cacheMs) {
     return cached.value;
   }
   return null;
 }
 
-function setUlCache(key, value) {
-  ulCache.set(key, { createdAt: Date.now(), value });
-}
-
-async function fetchUlList(kind) {
-  const cacheKey = `ul:${kind}`;
-  const cached = getUlCache(cacheKey);
-  if (cached) return cached;
-  const data = await ulFetch(`/list-${kind}`);
-  setUlCache(cacheKey, data);
-  return data;
-}
-
-function inferUlGpuCandidate(name) {
-  const text = String(name || "");
-  const rtx = text.match(/\bRTX\s*\d{4}(?:\s*Ti)?(?:\s*SUPER)?\b/i);
-  if (rtx) return `Nvidia GeForce ${rtx[0].replace(/\s+/g, " ").trim()}`;
-  const gtx = text.match(/\bGTX\s*\d{3,4}(?:\s*Ti)?(?:\s*SUPER)?\b/i);
-  if (gtx) return `Nvidia GeForce ${gtx[0].replace(/\s+/g, " ").trim()}`;
-  const rx = text.match(/\bRX\s*\d{4}(?:\s*XT)?\b/i);
-  if (rx) return `AMD Radeon ${rx[0].replace(/\s+/g, " ").trim()}`;
-  const arc = text.match(/\bArc\s+[A-Z]\d{3}\b/i);
-  if (arc) return `Intel ${arc[0].replace(/\s+/g, " ").trim()}`;
-  return text;
-}
-
-function inferUlCpuCandidate(name) {
-  const text = String(name || "");
-  const amd = text.match(/\bAMD\s+Ryzen\s+[3579]\s+\d{4,5}[A-Z0-9-]*\b/i);
-  if (amd) return amd[0].replace(/\s+/g, " ").trim();
-  const threadripper = text.match(/\bAMD\s+Ryzen\s+Threadripper\s+[A-Za-z0-9\s-]+\b/i);
-  if (threadripper) return threadripper[0].replace(/\s+/g, " ").trim();
-  const intelCore = text.match(/\bIntel\s+Core\s+(?:Ultra\s+)?[3579]\s*[- ]?\d{4,5}[A-Z0-9-]*\b/i);
-  if (intelCore) return intelCore[0].replace(/\s+/g, " ").trim();
-  return text;
-}
-
-function scoreUlNameMatch(candidate, listName) {
-  const candidateText = normalizeUlText(candidate);
-  const listText = normalizeUlText(listName);
-  if (!candidateText || !listText) return 0;
-  if (candidateText === listText) return 1000;
-  if (listText.includes(candidateText)) return 900 + candidateText.length;
-  if (candidateText.includes(listText)) return 850 + listText.length;
-
-  const candidateTokens = new Set(candidateText.split(" "));
-  const listTokens = new Set(listText.split(" "));
-  let overlap = 0;
-  candidateTokens.forEach((token) => {
-    if (listTokens.has(token)) overlap += 1;
-  });
-  return overlap * 100 - Math.abs(listTokens.size - candidateTokens.size);
-}
-
-function findBestUlCpuName(productName, list) {
-  const candidate = inferUlCpuCandidate(productName);
-  const entries = Array.isArray(list) ? list : [];
-  const best = entries
-    .map((entry) => ({ entry, score: scoreUlNameMatch(candidate, entry.name || entry) }))
-    .sort((a, b) => b.score - a.score)[0];
-  return best && best.score >= 250 ? (best.entry.name || best.entry) : null;
-}
-
-function findBestUlGpuEntry(productName, list) {
-  const candidate = inferUlGpuCandidate(productName);
-  const entries = Array.isArray(list) ? list : [];
-  const desktopEntries = entries.filter((entry) => !entry.type || entry.type === "desktop");
-  const best = desktopEntries
-    .map((entry) => ({ entry, score: scoreUlNameMatch(candidate, entry.name || entry) }))
-    .sort((a, b) => b.score - a.score)[0];
-  return best && best.score >= 250 ? best.entry : null;
+function setHowManyFpsCache(key, value) {
+  howManyFpsCache.set(key, { createdAt: Date.now(), value });
 }
 
 function inferMemoryChannels(memory) {
@@ -826,16 +748,24 @@ function inferMemoryFrequency(memory) {
   return /DDR5/i.test(memory?.specs?.memoryType || "") ? 6000 : 3200;
 }
 
-function buildUlEstimatePayload(parts, cpuName, gpuEntry) {
-  return {
-    cpuName,
-    gpuName: gpuEntry.name || gpuEntry,
-    cpuOC: 1,
-    gpuNumber: 1,
-    gpuType: gpuEntry.type || "desktop",
-    memchannels: inferMemoryChannels(parts.memory),
-    memfrequency: inferMemoryFrequency(parts.memory)
-  };
+function inferBenchmarkCpuName(name) {
+  const text = String(name || "");
+  const amd = text.match(/\bRyzen\s+(?:Threadripper\s+)?[3579]\s+\d{4,5}[A-Z0-9-]*\b/i);
+  if (amd) return amd[0].replace(/\s+/g, " ").trim();
+  const intelCore = text.match(/\bCore\s+(?:Ultra\s+)?[3579][-\s]?\d{4,5}[A-Z0-9-]*\b/i);
+  if (intelCore) return intelCore[0].replace(/\s+/g, " ").trim();
+  return text.replace(/^AMD\s+/i, "").replace(/^Intel\s+/i, "").trim() || text;
+}
+
+function inferBenchmarkGpuName(name) {
+  const text = String(name || "");
+  const nvidia = text.match(/\bRTX\s*\d{4}(?:\s*Ti)?(?:\s*SUPER)?\b/i) || text.match(/\bGTX\s*\d{3,4}(?:\s*Ti)?(?:\s*SUPER)?\b/i);
+  if (nvidia) return nvidia[0].replace(/\s+/g, " ").trim();
+  const amd = text.match(/\bRX\s*\d{4}(?:\s*XT)?\b/i);
+  if (amd) return amd[0].replace(/\s+/g, " ").trim();
+  const intel = text.match(/\bArc\s+[A-Z]\d{3}\b/i);
+  if (intel) return intel[0].replace(/\s+/g, " ").trim();
+  return text.trim();
 }
 
 function deriveSpecs(item) {
@@ -897,93 +827,82 @@ function deriveSpecs(item) {
   return specs;
 }
 
-function collectUlGameRows(node, context = {}, rows = []) {
-  if (Array.isArray(node)) {
-    node.forEach((item) => collectUlGameRows(item, context, rows));
-    return rows;
-  }
+const benchmarkScenarios = [
+  { resolution: "1080p", setting: "Medium", preset: "Medium" },
+  { resolution: "1080p", setting: "Ultra", preset: "Ultra" },
+  { resolution: "1440p", setting: "Ultra", preset: "Ultra" },
+  { resolution: "4K", setting: "Ultra", preset: "Ultra" }
+];
 
-  if (!node || typeof node !== "object") {
-    return rows;
-  }
+async function fetchHowManyFpsEstimate(cpu, gpu, game, scenario) {
+  const cacheKey = `hmf:${normalizeBenchmarkText(cpu)}|${normalizeBenchmarkText(gpu)}|${normalizeBenchmarkText(game)}|${scenario.resolution}|${scenario.preset}`;
+  const cached = getHowManyFpsCache(cacheKey);
+  if (cached) return cached;
 
-  const nextContext = {
-    game: node.game || node.gameName || node.name || context.game,
-    resolution: node.resolution || node.displayResolution || context.resolution,
-    setting: node.setting || node.settings || node.quality || context.setting,
-    fps: typeof node.fps === "number" ? node.fps : typeof node.avgFps === "number" ? node.avgFps : context.fps
-  };
-
-  if (nextContext.game && nextContext.resolution && nextContext.setting && typeof nextContext.fps === "number") {
-    rows.push({
-      game: nextContext.game,
-      resolution: nextContext.resolution,
-      setting: nextContext.setting,
-      fps: nextContext.fps
-    });
-  }
-
-  Object.entries(node).forEach(([key, value]) => {
-    if (["game", "gameName", "name", "resolution", "displayResolution", "setting", "settings", "quality", "fps", "avgFps"].includes(key)) {
-      return;
-    }
-    if (Array.isArray(value) || (value && typeof value === "object")) {
-      collectUlGameRows(value, {
-        ...nextContext,
-        game: nextContext.game || (key.match(/[A-Za-z]/) ? key : nextContext.game)
-      }, rows);
-    }
-  });
-
-  return rows;
-}
-
-async function estimateUlBenchmarks(parts) {
-  if (!hasUlApiConfig()) {
-    return {
-      configured: false,
-      message: "UL Benchmarks API credentials are not configured."
-    };
-  }
-
-  const cpuList = await fetchUlList("cpu");
-  const gpuList = await fetchUlList("gpu");
-  const cpuName = findBestUlCpuName(parts.cpu?.name || parts.cpu?.displayName || "", cpuList);
-  const gpuEntry = findBestUlGpuEntry(parts.gpu?.name || parts.gpu?.displayName || "", gpuList);
-
-  if (!cpuName || !gpuEntry) {
-    return {
-      configured: true,
-      message: "UL Benchmarks could not confidently match the selected CPU or GPU to supported hardware.",
-      matches: {
-        cpuName,
-        gpuName: gpuEntry?.name || null
-      }
-    };
-  }
-
-  const payload = buildUlEstimatePayload(parts, cpuName, gpuEntry);
-  const estimate = await ulFetch("/estimate", {
+  const data = await howManyFpsFetch("/v1/fps", {
     method: "POST",
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      cpu,
+      gpu,
+      game,
+      resolution: scenario.resolution,
+      preset: scenario.preset
+    })
   });
 
-  const rawRows = collectUlGameRows(estimate);
-  const rows = rawRows
-    .filter((row) => ulPopularGames.includes(row.game))
-    .sort((a, b) => ulPopularGames.indexOf(a.game) - ulPopularGames.indexOf(b.game));
+  setHowManyFpsCache(cacheKey, data);
+  return data;
+}
+
+async function estimateGameBenchmarks(parts) {
+  if (!hasHowManyFpsConfig()) {
+    return {
+      configured: false,
+      provider: "HowManyFPS",
+      message: "HowManyFPS API credentials are not configured."
+    };
+  }
+
+  const cpu = inferBenchmarkCpuName(parts.cpu?.name || parts.cpu?.displayName || "");
+  const gpu = inferBenchmarkGpuName(parts.gpu?.name || parts.gpu?.displayName || "");
+
+  if (!cpu || !gpu) {
+    return {
+      configured: true,
+      provider: "HowManyFPS",
+      message: "HowManyFPS could not infer a CPU or GPU name from the selected build."
+    };
+  }
+
+  const rows = [];
+  for (const game of popularBenchmarkGames) {
+    for (const scenario of benchmarkScenarios) {
+      try {
+        const result = await fetchHowManyFpsEstimate(cpu, gpu, game, scenario);
+        if (typeof result.avgFps === "number") {
+          rows.push({
+            game,
+            resolution: scenario.resolution,
+            setting: scenario.setting,
+            fps: result.avgFps,
+            min1Fps: typeof result.min1Fps === "number" ? result.min1Fps : null
+          });
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+  }
 
   return {
     configured: true,
-    payload,
-    matches: {
-      cpuName,
-      gpuName: gpuEntry.name || gpuEntry
-    },
-    rows
+    provider: "HowManyFPS",
+    matches: { cpuName: cpu, gpuName: gpu },
+    rows,
+    message: rows.length > 0 ? "" : "HowManyFPS returned no FPS rows for the selected CPU/GPU build."
   };
 }
 
@@ -1249,14 +1168,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/ul-benchmarks") {
+  if (url.pathname === "/api/game-benchmarks") {
     try {
       const body = req.method === "POST" ? await readJsonBody(req) : {};
-      const result = await estimateUlBenchmarks(body.parts || {});
+      const result = await estimateGameBenchmarks(body.parts || {});
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 200, {
-        configured: hasUlApiConfig(),
+        configured: hasHowManyFpsConfig(),
         rows: [],
         message: error.message
       });
