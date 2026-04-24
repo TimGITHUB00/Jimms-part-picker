@@ -90,6 +90,7 @@ button,
 input,
 select {
   font: inherit;
+  color-scheme: inherit;
 }
 
 .topbar {
@@ -594,7 +595,7 @@ h2 {
   background:
     linear-gradient(45deg, transparent 50%, var(--muted) 50%) right 15px top 19px / 6px 6px no-repeat,
     linear-gradient(135deg, var(--muted) 50%, transparent 50%) right 10px top 19px / 6px 6px no-repeat,
-    white;
+    var(--surface-strong);
   padding: 0 32px 0 12px;
 }
 
@@ -606,7 +607,7 @@ h2 {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface-strong);
   color: var(--ink) !important;
 }
 
@@ -614,6 +615,7 @@ h2 {
   width: 17px;
   min-height: 17px;
   accent-color: var(--accent);
+  background: var(--surface-strong);
 }
 
 .catalog-head {
