@@ -115,11 +115,15 @@ function authHeaders() {
     : {};
 }
 
+function cloneBuildParts(parts) {
+  return JSON.parse(JSON.stringify(parts || {}));
+}
+
 function persistCurrentBuild() {
   window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
     currentBuildId: state.currentBuildId,
     currentBuildName: state.currentBuildName,
-    selected: state.selected
+    selected: cloneBuildParts(state.selected)
   }));
 }
 
@@ -148,8 +152,9 @@ function restoreCurrentBuild() {
       state.currentBuildId = parsed.currentBuildId || null;
       state.currentBuildName = parsed.currentBuildName || "My Build";
       if (parsed.selected && typeof parsed.selected === "object") {
+        const selected = cloneBuildParts(parsed.selected);
         categories.forEach(([key]) => {
-          state.selected[key] = parsed.selected[key] || null;
+          state.selected[key] = selected[key] || null;
         });
       }
     }
@@ -234,8 +239,9 @@ function renderSavedBuilds() {
     loadButton.addEventListener("click", () => {
       state.currentBuildId = build.id;
       state.currentBuildName = build.name || "My Build";
+      const parts = cloneBuildParts(build.parts);
       categories.forEach(([key]) => {
-        state.selected[key] = build.parts?.[key] || null;
+        state.selected[key] = parts[key] || null;
       });
       persistCurrentBuild();
       updateBuildNameInput();
@@ -317,13 +323,13 @@ async function saveCurrentBuild() {
     const existing = state.savedBuilds.find((build) => build.id === state.currentBuildId);
     if (existing) {
       existing.name = state.currentBuildName;
-      existing.parts = state.selected;
+      existing.parts = cloneBuildParts(state.selected);
       existing.updatedAt = now;
     } else {
       const record = {
         id: state.currentBuildId || `local-${Date.now()}`,
         name: state.currentBuildName,
-        parts: state.selected,
+        parts: cloneBuildParts(state.selected),
         createdAt: now,
         updatedAt: now
       };
