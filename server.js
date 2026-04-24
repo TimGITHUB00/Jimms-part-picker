@@ -503,11 +503,14 @@ function createSmtpSession(config) {
     function fail(error) {
       if (closed) return;
       closed = true;
+      const reason = error instanceof Error
+        ? error
+        : new Error(String(error || "SMTP connection failed."));
       while (waiters.length > 0) {
-        waiters.shift().reject(error);
+        waiters.shift().reject(reason);
       }
       socket.destroy();
-      reject(error);
+      reject(reason);
     }
 
     function consume() {
@@ -542,6 +545,9 @@ function createSmtpSession(config) {
     }
 
     socket.setEncoding("utf8");
+    socket.setTimeout(15000, () => {
+      fail(new Error("SMTP connection timed out."));
+    });
     socket.on("data", (chunk) => {
       buffer += chunk;
       consume();
@@ -570,7 +576,8 @@ function createSmtpSession(config) {
           }
           const response = await nextResponse();
           if (!String(response.code).startsWith(String(codePrefix))) {
-            const details = options.redactResponse ? "" : ` ${response.text}`.trimEnd();
+            const responseText = String(response.text || "").trim();
+            const details = options.redactResponse ? "" : responseText;
             throw new Error(`${options.label || "SMTP command"} failed with ${response.code}${details ? `: ${details}` : ""}`);
           }
           return response;
@@ -578,10 +585,38 @@ function createSmtpSession(config) {
 
         const greeting = await expect(220, null, { label: "SMTP greeting" });
         void greeting;
-        await expect(250, `EHLO ${sanitizeHeader(os.hostname() || "localhost")}`, { label: "SMTP EHLO" });
+        const ehloResponse = await expect(250, `EHLO ${sanitizeHeader(os.hostname() || "localhost")}`, { label: "SMTP EHLO" });
+        const authLine = ehloResponse.lines.find((line) => /AUTH/i.test(line)) || "";
+        const advertisedAuth = authLine.toUpperCase();
         if (config.user) {
           const authPayload = Buffer.from(`\0${config.user}\0${config.pass}`, "utf8").toString("base64");
-          await expect(235, `AUTH PLAIN ${authPayload}`, { label: "SMTP AUTH", redactResponse: true });
+          let authed = false;
+          let authError = null;
+
+          if (!advertisedAuth || advertisedAuth.includes("PLAIN")) {
+            try {
+              await expect(235, `AUTH PLAIN ${authPayload}`, { label: "SMTP AUTH PLAIN", redactResponse: true });
+              authed = true;
+            } catch (error) {
+              authError = error;
+            }
+          }
+
+          if (!authed && (!advertisedAuth || advertisedAuth.includes("LOGIN"))) {
+            try {
+              await expect(334, "AUTH LOGIN", { label: "SMTP AUTH LOGIN", redactResponse: true });
+              await expect(334, Buffer.from(config.user, "utf8").toString("base64"), { label: "SMTP AUTH LOGIN username", redactResponse: true });
+              await expect(235, Buffer.from(config.pass, "utf8").toString("base64"), { label: "SMTP AUTH LOGIN password", redactResponse: true });
+              authed = true;
+              authError = null;
+            } catch (error) {
+              authError = error;
+            }
+          }
+
+          if (!authed) {
+            throw authError || new Error("SMTP server did not accept the configured login method.");
+          }
         }
 
         resolve({
