@@ -1579,7 +1579,7 @@ const server = http.createServer(async (req, res) => {
         store,
         email,
         "Welcome to Jimms Part Picker",
-        `Hi ${name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nEmail: ${email}\n\nHave fun building.`
+        `Hi ${name},\n\nYour local Jimms Part Picker account is ready. You can now save named builds to this account and keep editing your current list after a refresh.\n\nUsername: ${name}\nEmail: ${email}\n\nHave fun building.`
       );
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
