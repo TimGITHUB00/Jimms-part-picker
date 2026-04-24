@@ -21,27 +21,85 @@
             <div class="auth-summary" id="authSummary">Guest mode</div>
             <div class="auth-inline-status" id="authInlineStatus" aria-live="polite"></div>
           </div>
-          <div class="auth-form" id="authForm">
-            <input id="accountNameInput" type="text" maxlength="80" placeholder="Username">
-            <input id="accountEmailInput" type="email" autocomplete="username" placeholder="Email">
-            <input id="accountPasswordInput" type="password" autocomplete="current-password" placeholder="Password">
+          <div class="auth-launchers" id="authLaunchers">
             <button class="ghost-button" id="registerButton" type="button">Register</button>
             <button class="ghost-button" id="loginButton" type="button">Sign in</button>
             <button class="ghost-button" id="forgotPasswordButton" type="button">Forgot password?</button>
-            <button class="ghost-button" id="testEmailButton" type="button">Send test email</button>
           </div>
-          <div class="reset-form" id="resetForm" hidden>
-            <input id="resetCodeInput" type="text" maxlength="16" placeholder="Reset code">
-            <input id="resetPasswordInput" type="password" autocomplete="new-password" placeholder="New password">
-            <button class="ghost-button" id="resetPasswordButton" type="button">Reset password</button>
-            <button class="ghost-button" id="cancelResetButton" type="button">Cancel</button>
-          </div>
+          <button class="ghost-button" id="testEmailButton" type="button" hidden>Send test email</button>
           <button class="ghost-button" id="signOutButton" type="button" hidden>Sign out</button>
         </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" title="Toggle dark mode">Dark mode</button>
         <div class="source-pill" id="sourcePill">Jimms.fi source</div>
       </div>
     </header>
+
+    <section class="auth-screen" id="authScreen" hidden aria-label="Account pages">
+      <div class="auth-backdrop" id="authBackdrop"></div>
+      <div class="auth-dialog">
+        <div class="auth-dialog-head">
+          <div>
+            <strong id="authPageTitle">Sign in</strong>
+            <p id="authPageMeta">Use your account to save builds and restore them later.</p>
+          </div>
+          <button class="ghost-button" id="closeAuthScreenButton" type="button">Close</button>
+        </div>
+
+        <form class="auth-page" id="registerPage" hidden>
+          <label class="build-name-field">
+            <span>Username</span>
+            <input id="registerUsernameInput" type="text" maxlength="80" placeholder="Username">
+          </label>
+          <label class="build-name-field">
+            <span>Email</span>
+            <input id="registerEmailInput" type="email" autocomplete="username" placeholder="Email">
+          </label>
+          <label class="build-name-field">
+            <span>Password</span>
+            <input id="registerPasswordInput" type="password" autocomplete="new-password" placeholder="Password">
+          </label>
+          <div class="auth-page-actions">
+            <button class="jimms-cart-button" id="submitRegisterButton" type="submit">Create account</button>
+            <button class="ghost-button" id="switchToLoginButton" type="button">Already have an account?</button>
+          </div>
+        </form>
+
+        <form class="auth-page" id="loginPage" hidden>
+          <label class="build-name-field">
+            <span>Email</span>
+            <input id="loginEmailInput" type="email" autocomplete="username" placeholder="Email">
+          </label>
+          <label class="build-name-field">
+            <span>Password</span>
+            <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="Password">
+          </label>
+          <div class="auth-page-actions">
+            <button class="jimms-cart-button" id="submitLoginButton" type="submit">Sign in</button>
+            <button class="ghost-button" id="switchToForgotButton" type="button">Forgot password?</button>
+          </div>
+        </form>
+
+        <form class="auth-page" id="forgotPage" hidden>
+          <label class="build-name-field">
+            <span>Email</span>
+            <input id="forgotEmailInput" type="email" autocomplete="username" placeholder="Email">
+          </label>
+          <label class="build-name-field">
+            <span>Reset code</span>
+            <input id="resetCodeInput" type="text" maxlength="16" placeholder="Reset code">
+          </label>
+          <label class="build-name-field">
+            <span>New password</span>
+            <input id="resetPasswordInput" type="password" autocomplete="new-password" placeholder="New password">
+          </label>
+          <div class="auth-page-actions auth-page-actions-stack">
+            <button class="jimms-cart-button" id="requestResetButton" type="button">Send reset email</button>
+            <button class="ghost-button" id="resetPasswordButton" type="submit">Reset password</button>
+            <button class="ghost-button" id="sendTestEmailButton" type="button">Send test email</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
     <main class="layout">
       <section class="builder" aria-label="PC build list">
