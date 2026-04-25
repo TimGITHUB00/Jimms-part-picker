@@ -125,6 +125,35 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendJsonWithHeaders(res, status, payload, extraHeaders = {}) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...extraHeaders
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function parseCookies(req) {
+  const header = String(req.headers.cookie || "");
+  if (!header) return {};
+  return header.split(";").reduce((cookies, part) => {
+    const [name, ...rest] = part.split("=");
+    const key = String(name || "").trim();
+    if (!key) return cookies;
+    cookies[key] = decodeURIComponent(rest.join("=").trim());
+    return cookies;
+  }, {});
+}
+
+function sessionCookieHeader(token, maxAgeSeconds = 60 * 60 * 24 * 30) {
+  return `jimms_part_picker_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax`;
+}
+
+function clearSessionCookieHeader() {
+  return "jimms_part_picker_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax";
+}
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -803,11 +832,11 @@ function buildLocalUser(userId, record) {
 async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
+  const cookieToken = parseCookies(req).jimms_part_picker_token || "";
+  const token = match?.[1] || cookieToken;
+  if (!token) {
     throw new Error("Missing sign-in token.");
   }
-
-  const token = match[1];
   if (token.startsWith("local_")) {
     const sessionId = token.slice("local_".length);
     const store = loadUserBuildStore();
@@ -1981,11 +2010,13 @@ const server = http.createServer(async (req, res) => {
         emailMessage = `Account created, but the welcome email could not be sent: ${emailError.message}`;
       }
       saveUserBuildStore(store);
-      sendJson(res, 200, {
+      sendJsonWithHeaders(res, 200, {
         ok: true,
         token,
         user: buildLocalUser(userId, store.users[userId]),
         message: emailMessage
+      }, {
+        "Set-Cookie": sessionCookieHeader(token)
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -2013,11 +2044,13 @@ const server = http.createServer(async (req, res) => {
       }
       const token = createLocalSession(store, userId);
       saveUserBuildStore(store);
-      sendJson(res, 200, {
+      sendJsonWithHeaders(res, 200, {
         ok: true,
         token,
         user: buildLocalUser(userId, record),
         message: "Signed in."
+      }, {
+        "Set-Cookie": sessionCookieHeader(token)
       });
     } catch (error) {
       sendJson(res, 400, {
@@ -2030,13 +2063,17 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/auth/local/logout" && req.method === "POST") {
     const authHeader = req.headers.authorization || "";
-    const match = authHeader.match(/^Bearer\s+local_(.+)$/i);
-    if (match) {
+    const authMatch = authHeader.match(/^Bearer\s+local_(.+)$/i);
+    const cookieMatch = String(parseCookies(req).jimms_part_picker_token || "").match(/^local_(.+)$/i);
+    const sessionId = authMatch?.[1] || cookieMatch?.[1] || "";
+    if (sessionId) {
       const store = loadUserBuildStore();
-      delete store.sessions[match[1]];
+      delete store.sessions[sessionId];
       saveUserBuildStore(store);
     }
-    sendJson(res, 200, { ok: true });
+    sendJsonWithHeaders(res, 200, { ok: true }, {
+      "Set-Cookie": clearSessionCookieHeader()
+    });
     return;
   }
 
