@@ -4,6 +4,18 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jimms Part Picker</title>
+    <script>
+      (() => {
+        try {
+          const theme = window.localStorage.getItem("jimms-part-picker-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.theme = theme;
+          }
+        } catch (error) {
+          void error;
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -24,7 +36,7 @@
           <div class="auth-launchers" id="authLaunchers">
             <a class="ghost-button" id="registerButton" href="/register.html">Register</a>
             <a class="ghost-button" id="forgotPasswordButton" href="/forgot-password.html">Forgot password?</a>
-            <button class="ghost-button" id="sessionButton" type="button">Sign in</button>
+            <a class="ghost-button" id="sessionButton" href="/login.html">Sign in</a>
           </div>
         </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" title="Toggle dark mode">Dark mode</button>

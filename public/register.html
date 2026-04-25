@@ -4,6 +4,18 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Register - Jimms Part Picker</title>
+    <script>
+      (() => {
+        try {
+          const theme = window.localStorage.getItem("jimms-part-picker-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.theme = theme;
+          }
+        } catch (error) {
+          void error;
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body data-auth-page="register">

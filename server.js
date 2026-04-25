@@ -193,15 +193,33 @@ function textFromHtml(html) {
 
 function loadLocalBenchmarkDataset() {
   if (localBenchmarkDatasetCache) return localBenchmarkDatasetCache;
-  const raw = fs.readFileSync(BENCHMARK_DATASET_PATH, "utf8");
-  localBenchmarkDatasetCache = JSON.parse(raw);
+  try {
+    const raw = fs.readFileSync(BENCHMARK_DATASET_PATH, "utf8");
+    localBenchmarkDatasetCache = JSON.parse(raw);
+  } catch (error) {
+    console.warn(`Could not load local benchmark dataset: ${error.message}`);
+    localBenchmarkDatasetCache = {
+      metadata: { provider: "Local Benchmark Dataset" },
+      cpus: [],
+      gpus: [],
+      games: []
+    };
+  }
   return localBenchmarkDatasetCache;
 }
 
 function loadGpuMarketDataset() {
   if (gpuMarketDatasetCache) return gpuMarketDatasetCache;
-  const raw = fs.readFileSync(GPU_MARKET_DATASET_PATH, "utf8");
-  gpuMarketDatasetCache = JSON.parse(raw);
+  try {
+    const raw = fs.readFileSync(GPU_MARKET_DATASET_PATH, "utf8");
+    gpuMarketDatasetCache = JSON.parse(raw);
+  } catch (error) {
+    console.warn(`Could not load GPU market dataset: ${error.message}`);
+    gpuMarketDatasetCache = {
+      metadata: { provider: "GPU Market Dataset" },
+      gpus: []
+    };
+  }
   return gpuMarketDatasetCache;
 }
 

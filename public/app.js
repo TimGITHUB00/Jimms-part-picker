@@ -377,6 +377,7 @@ function renderAuthState() {
     registerButton.hidden = true;
     forgotPasswordButton.hidden = true;
     sessionButton.textContent = "Sign out";
+    sessionButton.setAttribute("href", "#sign-out");
     return;
   }
 
@@ -384,6 +385,7 @@ function renderAuthState() {
   registerButton.hidden = false;
   forgotPasswordButton.hidden = false;
   sessionButton.textContent = "Sign in";
+  sessionButton.setAttribute("href", "/login.html");
 }
 
 async function loadAuthConfig() {
@@ -1524,12 +1526,12 @@ newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
-sessionButton.addEventListener("click", () => {
+sessionButton.addEventListener("click", (event) => {
   if (!state.auth.user) {
-    window.location.href = "/login.html";
     return;
   }
 
+  event.preventDefault();
   const headers = authHeaders();
   state.auth.token = "";
   state.auth.user = null;
