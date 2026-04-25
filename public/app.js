@@ -337,17 +337,30 @@ async function fetchSavedBuilds() {
         ...authHeaders()
       }
     });
-    if (!response.ok) throw new Error("Auth expired");
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("AUTH_EXPIRED");
+      }
+      throw new Error(`AUTH_REFRESH_FAILED_${response.status}`);
+    }
     const data = await response.json();
     state.auth.user = data.user || null;
     state.savedBuilds = data.builds || [];
     persistAuthState();
   } catch (error) {
     console.warn("Could not refresh signed-in session", error);
-    state.auth.token = "";
-    state.auth.user = null;
-    state.savedBuilds = loadLocalSavedBuilds();
-    persistAuthState();
+    if (error?.message === "AUTH_EXPIRED") {
+      state.auth.token = "";
+      state.auth.user = null;
+      state.savedBuilds = loadLocalSavedBuilds();
+      persistAuthState();
+      setAuthStatus("Session expired. Please sign in again.", "warn");
+    } else {
+      if (!state.auth.user) {
+        state.savedBuilds = loadLocalSavedBuilds();
+      }
+      setAuthStatus("Signed in, but account data could not refresh just now.", "warn");
+    }
   }
 
   renderAuthState();
