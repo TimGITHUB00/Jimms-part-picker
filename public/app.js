@@ -1591,10 +1591,19 @@ sessionButton.addEventListener("click", (event) => {
   renderSavedBuilds();
 });
 
-applyTheme(getStoredTheme());
-restoreCurrentBuild();
-updateBuildNameInput();
-renderTabs();
-renderPartRows();
-loadProducts();
-loadAuthConfig();
+function safeRun(label, action) {
+  try {
+    return action();
+  } catch (error) {
+    console.warn(`${label} failed`, error);
+    return null;
+  }
+}
+
+safeRun("applyTheme", () => applyTheme(getStoredTheme()));
+safeRun("restoreCurrentBuild", restoreCurrentBuild);
+safeRun("updateBuildNameInput", updateBuildNameInput);
+safeRun("renderTabs", renderTabs);
+safeRun("loadAuthConfig", loadAuthConfig);
+safeRun("renderPartRows", renderPartRows);
+safeRun("loadProducts", loadProducts);
