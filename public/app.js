@@ -1537,41 +1537,47 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function bindEvent(element, eventName, handler) {
+  if (!element) return;
+  element.addEventListener(eventName, handler);
+}
+
 let searchTimer;
-searchInput.addEventListener("input", () => {
+bindEvent(searchInput, "input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadProducts, 280);
 });
 
 [sortSelect, brandFilter, specFilter, minPriceFilter, maxPriceFilter, stockFilter].forEach((control) => {
+  if (!control) return;
   control.addEventListener("input", refreshFilteredProducts);
   control.addEventListener("change", refreshFilteredProducts);
 });
 
-clearBuild.addEventListener("click", () => {
+bindEvent(clearBuild, "click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
 
-addToJimmsCart.addEventListener("click", openBuildInJimmsCart);
-themeToggle.addEventListener("click", toggleTheme);
-buildNameInput.addEventListener("input", () => {
+bindEvent(addToJimmsCart, "click", openBuildInJimmsCart);
+bindEvent(themeToggle, "click", toggleTheme);
+bindEvent(buildNameInput, "input", () => {
   state.currentBuildName = buildNameInput.value.trim() || "My Build";
   savedBuildButtonLabel();
   persistCurrentBuild();
 });
-saveBuildButton.addEventListener("click", async () => {
+bindEvent(saveBuildButton, "click", async () => {
   try {
     await saveCurrentBuild();
   } catch (error) {
     window.alert("Could not save this build right now.");
   }
 });
-newBuildButton.addEventListener("click", () => {
+bindEvent(newBuildButton, "click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
-sessionButton.addEventListener("click", (event) => {
+bindEvent(sessionButton, "click", (event) => {
   if (!state.auth.user) {
     return;
   }
