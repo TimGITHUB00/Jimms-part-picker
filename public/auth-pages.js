@@ -1,4 +1,5 @@
 const AUTH_TOKEN_KEY = "jimms-part-picker-auth-token";
+const AUTH_USER_KEY = "jimms-part-picker-auth-user";
 const THEME_KEY = "jimms-part-picker-theme";
 
 const pageMode = document.body.dataset.authPage || "";
@@ -29,6 +30,23 @@ function setStatus(message = "", tone = "") {
 
 function redirectHome() {
   window.location.href = "/";
+}
+
+function persistAuth(data) {
+  const token = typeof data?.token === "string" ? data.token.trim() : "";
+  const user = data?.user && typeof data.user === "object" ? data.user : null;
+
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+
+  if (user) {
+    window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  } else {
+    window.localStorage.removeItem(AUTH_USER_KEY);
+  }
 }
 
 async function postJson(url, payload, authToken = "") {
@@ -67,7 +85,7 @@ function setupRegisterPage() {
         email: emailInput.value.trim(),
         password: passwordInput.value
       });
-      window.localStorage.setItem(AUTH_TOKEN_KEY, data.token || "");
+      persistAuth(data);
       setStatus(data.message || "Account created.", "ok");
       setTimeout(redirectHome, 500);
     } catch (error) {
@@ -88,7 +106,7 @@ function setupLoginPage() {
         email: emailInput.value.trim(),
         password: passwordInput.value
       });
-      window.localStorage.setItem(AUTH_TOKEN_KEY, data.token || "");
+      persistAuth(data);
       setStatus(data.message || "Signed in.", "ok");
       setTimeout(redirectHome, 400);
     } catch (error) {

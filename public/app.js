@@ -25,6 +25,7 @@ const jimmsUrls = {
 const THEME_KEY = "jimms-part-picker-theme";
 const DRAFT_KEY = "jimms-part-picker-current-build";
 const AUTH_TOKEN_KEY = "jimms-part-picker-auth-token";
+const AUTH_USER_KEY = "jimms-part-picker-auth-user";
 const LOCAL_SAVED_BUILDS_KEY = "jimms-part-picker-local-saved-builds";
 
 const state = {
@@ -37,8 +38,8 @@ const state = {
   currentBuildName: "My Build",
   savedBuilds: [],
   auth: {
-    token: window.localStorage.getItem(AUTH_TOKEN_KEY) || "",
-    user: null
+    token: (window.localStorage.getItem(AUTH_TOKEN_KEY) || "").trim(),
+    user: loadStoredAuthUser()
   },
   benchmarks: {
     status: "idle",
@@ -91,6 +92,34 @@ function getStoredTheme() {
   const stored = window.localStorage.getItem(THEME_KEY);
   if (stored === "light" || stored === "dark") return stored;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function loadStoredAuthUser() {
+  try {
+    const raw = window.localStorage.getItem(AUTH_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (error) {
+    console.warn("Could not restore signed-in user", error);
+    window.localStorage.removeItem(AUTH_USER_KEY);
+    return null;
+  }
+}
+
+function persistAuthState() {
+  const token = String(state.auth.token || "").trim();
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+
+  if (state.auth.user) {
+    window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
+  } else {
+    window.localStorage.removeItem(AUTH_USER_KEY);
+  }
 }
 
 function applyTheme(theme) {
@@ -296,6 +325,7 @@ async function fetchSavedBuilds() {
   if (!state.auth.token) {
     state.auth.user = null;
     state.savedBuilds = loadLocalSavedBuilds();
+    persistAuthState();
     renderSavedBuilds();
     renderAuthState();
     return;
@@ -311,11 +341,13 @@ async function fetchSavedBuilds() {
     const data = await response.json();
     state.auth.user = data.user || null;
     state.savedBuilds = data.builds || [];
+    persistAuthState();
   } catch (error) {
+    console.warn("Could not refresh signed-in session", error);
     state.auth.token = "";
     state.auth.user = null;
     state.savedBuilds = loadLocalSavedBuilds();
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    persistAuthState();
   }
 
   renderAuthState();
@@ -1536,7 +1568,7 @@ sessionButton.addEventListener("click", (event) => {
   state.auth.token = "";
   state.auth.user = null;
   state.savedBuilds = loadLocalSavedBuilds();
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  persistAuthState();
   fetch("/api/auth/local/logout", {
     method: "POST",
     headers
