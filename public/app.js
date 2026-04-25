@@ -78,7 +78,9 @@ const themeToggle = document.querySelector("#themeToggle");
 const authSummary = document.querySelector("#authSummary");
 const authInlineStatus = document.querySelector("#authInlineStatus");
 const authLaunchers = document.querySelector("#authLaunchers");
-const signOutButton = document.querySelector("#signOutButton");
+const registerButton = document.querySelector("#registerButton");
+const forgotPasswordButton = document.querySelector("#forgotPasswordButton");
+const sessionButton = document.querySelector("#sessionButton");
 const savedBuildsStatus = document.querySelector("#savedBuildsStatus");
 const buildNameInput = document.querySelector("#buildNameInput");
 const saveBuildButton = document.querySelector("#saveBuildButton");
@@ -372,14 +374,16 @@ async function saveCurrentBuild() {
 function renderAuthState() {
   if (state.auth.user) {
     authSummary.textContent = `${state.auth.user.username || state.auth.user.name} (${state.auth.user.email})`;
-    signOutButton.hidden = false;
-    authLaunchers.hidden = true;
+    registerButton.hidden = true;
+    forgotPasswordButton.hidden = true;
+    sessionButton.textContent = "Sign out";
     return;
   }
 
   authSummary.textContent = "Guest mode (local saves still work)";
-  signOutButton.hidden = true;
-  authLaunchers.hidden = false;
+  registerButton.hidden = false;
+  forgotPasswordButton.hidden = false;
+  sessionButton.textContent = "Sign in";
 }
 
 async function loadAuthConfig() {
@@ -1520,7 +1524,12 @@ newBuildButton.addEventListener("click", () => {
   resetCurrentBuild(true);
   renderPartRows();
 });
-signOutButton.addEventListener("click", () => {
+sessionButton.addEventListener("click", () => {
+  if (!state.auth.user) {
+    window.location.href = "/login.html";
+    return;
+  }
+
   const headers = authHeaders();
   state.auth.token = "";
   state.auth.user = null;
