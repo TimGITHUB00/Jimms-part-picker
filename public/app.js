@@ -459,6 +459,71 @@ function categoryLabel(key) {
   return categories.find(([id]) => id === key)?.[1] || key;
 }
 
+function englishProductDescription(product) {
+  const specs = product.specs || {};
+
+  if (specs.valueSummary) return specs.valueSummary;
+
+  switch (product.category) {
+    case "cpu":
+      return [
+        specs.socket,
+        specs.cores,
+        specs.frequency,
+        specs.packageType
+      ].filter(Boolean).join(", ") || "Processor";
+    case "cooler":
+    case "aio":
+      return [
+        specs.coolerType === "AIO" && specs.radiatorSize ? `${specs.radiatorSize}mm AIO liquid cooler` : "",
+        specs.coolerType === "Air" ? "Air CPU cooler" : "",
+        Array.isArray(specs.supportedSockets) && specs.supportedSockets.length ? `Supports ${specs.supportedSockets.slice(0, 4).join(", ")}` : "",
+        specs.heatRating ? `${specs.heatRating}W heat rating` : ""
+      ].filter(Boolean).join(". ") || "CPU cooling";
+    case "gpu":
+      return [
+        specs.capacity ? `${specs.capacity} ${specs.memoryType || ""}`.trim() : "",
+        specs.targetResolution ? `${specs.targetResolution} gaming class` : "",
+        specs.thermalLabel || "",
+        specs.valueLabel || ""
+      ].filter(Boolean).join(". ") || "Graphics card";
+    case "motherboard":
+      return [
+        specs.socket,
+        specs.memoryType,
+        specs.formFactor,
+        specs.memorySlots ? `${specs.memorySlots} DIMM slots` : ""
+      ].filter(Boolean).join(", ") || "Motherboard";
+    case "memory":
+      return [
+        specs.memoryType,
+        specs.speed,
+        specs.casLatency,
+        specs.capacityGb ? `${specs.capacityGb}GB kit` : ""
+      ].filter(Boolean).join(", ") || "Memory kit";
+    case "storage":
+      return [
+        specs.capacity,
+        specs.interface,
+        specs.formFactor
+      ].filter(Boolean).join(", ") || "Storage drive";
+    case "case":
+      return [
+        Array.isArray(specs.supportedFormFactors) && specs.supportedFormFactors.length ? `Fits ${specs.supportedFormFactors.join(", ")}` : "",
+        specs.maxGpuLengthMm ? `GPU clearance ${specs.maxGpuLengthMm}mm` : "",
+        specs.maxRadiatorSize ? `Radiators up to ${specs.maxRadiatorSize}mm` : ""
+      ].filter(Boolean).join(". ") || "PC case";
+    case "psu":
+      return [
+        specs.wattage ? `${specs.wattage}W` : "",
+        specs.efficiency || "",
+        specs.modularity || "Power supply"
+      ].filter(Boolean).join(", ");
+    default:
+      return categoryLabel(product.category);
+  }
+}
+
 function selectedBuildProducts() {
   return categories
     .map(([key]) => state.selected[key])
@@ -588,12 +653,12 @@ function renderPartRows() {
       const details = document.createElement("div");
       details.className = "selected-details";
       const values = productDetailValues(item);
-      const detailText = values.length > 0 ? values.join(" · ") : item.description || item.sku || "Jimms.fi";
+      const detailText = values.length > 0 ? values.join(" · ") : englishProductDescription(item) || item.sku || "Jimms.fi";
       details.textContent = detailText;
       selected.append(details);
 
       const meta = document.createElement("span");
-      meta.textContent = item.sku || item.description || "Jimms.fi";
+      meta.textContent = item.sku || englishProductDescription(item) || "Jimms.fi";
       selected.append(meta);
       price.textContent = item.price;
       remove.hidden = false;
@@ -632,7 +697,7 @@ function renderProducts() {
     card.querySelector("h3").textContent = product.displayName || cleanProductName(product);
     card.querySelector(".sku").textContent = product.sku || "Jimms.fi product";
     renderProductDetails(card, product);
-    card.querySelector(".desc").textContent = product.specs?.valueSummary || product.description || categoryLabel(product.category);
+    card.querySelector(".desc").textContent = englishProductDescription(product);
     card.querySelector(".stock").textContent = product.availability || "Availability on Jimms.fi";
     card.querySelector(".price").textContent = product.price;
     if (product.image) {
