@@ -792,7 +792,7 @@ function applyProductFilters() {
   }
 
   if (inStockOnly) {
-    products = products.filter((item) => /varastossa/i.test(item.availability || ""));
+    products = products.filter((item) => /in stock/i.test(item.availability || ""));
   }
 
   products.sort((a, b) => {

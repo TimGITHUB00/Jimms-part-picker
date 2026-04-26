@@ -92,12 +92,12 @@ function product(category, name, sku, price, availability, description) {
   const item = {
     id: `${category}-${sku}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
     category,
-    name,
+    name: translateCatalogText(name),
     brand: firstMatch(name, /^([A-Za-z0-9]+)/) || "",
     sku,
     price,
-    availability,
-    description,
+    availability: translateAvailability(availability),
+    description: translateCatalogText(description),
     sourceUrl: `${JIMMS_BASE}${categories[category]?.url || "/fi/Product/Komponentit"}`,
     productId: null,
     productGuid: null
@@ -206,6 +206,70 @@ function decodeHtml(value) {
     .replace(/&#214;/g, "Ö")
     .replace(/&#228;/g, "ä")
     .replace(/&#246;/g, "ö");
+}
+
+function translateAvailability(value) {
+  const text = String(value || "").trim();
+  if (!text) return "Check live stock on Jimms.fi";
+
+  let translated = text
+    .replace(/Varastossa yli\s*(\d+)\s*kpl/gi, "In stock, over $1 units")
+    .replace(/Varastossa\s*(\d+)\s*kpl/gi, "In stock, $1 units")
+    .replace(/Varastossa/gi, "In stock")
+    .replace(/Tulossa varastoon/gi, "Incoming stock")
+    .replace(/Tilattavissa/gi, "Available to order")
+    .replace(/Ennakkotilattavissa/gi, "Pre-order")
+    .replace(/Loppu varastosta/gi, "Out of stock")
+    .replace(/Ei varastossa/gi, "Out of stock")
+    .replace(/Toimitusaika/gi, "Lead time")
+    .replace(/Heti lähetettävissä/gi, "Ready to ship")
+    .replace(/Myymäläsaatavuus/gi, "Store availability")
+    .replace(/Arvioitu toimitus/gi, "Estimated delivery");
+
+  translated = translated.replace(/\s+/g, " ").trim();
+  return translated || text;
+}
+
+function translateColorName(value) {
+  return String(value || "")
+    .replace(/\bmusta\b/gi, "black")
+    .replace(/\bvalkoinen\b/gi, "white")
+    .replace(/\bhopea\b/gi, "silver")
+    .replace(/\bharmaa\b/gi, "gray")
+    .replace(/\bpunainen\b/gi, "red")
+    .replace(/\bsininen\b/gi, "blue")
+    .replace(/\bkulta\b/gi, "gold");
+}
+
+function translateCatalogText(value) {
+  const text = String(value || "");
+  if (!text) return "";
+
+  return translateColorName(text)
+    .replace(/prosessorijäähdytin/gi, "CPU cooler")
+    .replace(/näytönohjain/gi, "graphics card")
+    .replace(/emolevy/gi, "motherboard")
+    .replace(/ATX-virtalähde/gi, "ATX power supply")
+    .replace(/virtalähde/gi, "power supply")
+    .replace(/nestejäähdytysratkaisu prosessorille/gi, "AIO liquid cooler")
+    .replace(/vesijäähdytysjärjestelmä prosessorille/gi, "AIO liquid cooler")
+    .replace(/SSD-levy/gi, "SSD")
+    .replace(/-levy/gi, " drive")
+    .replace(/ikkunallinen miditornikotelo/gi, "windowed mid-tower case")
+    .replace(/miditornikotelo/gi, "mid-tower case")
+    .replace(/Mini-ITX-kotelo/gi, "Mini-ITX case")
+    .replace(/mATX-kotelo/gi, "mATX case")
+    .replace(/ATX-kotelo/gi, "ATX case")
+    .replace(/\bkotelo\b/gi, "case")
+    .replace(/Ryzen 9000 -sarja/gi, "Ryzen 9000 series")
+    .replace(/TÄMÄ LEGENDA ON LYÖMÄTÖN/gi, "This legend is hard to beat")
+    .replace(/Jäähdytä prosessorisi ammattilaisen ottein!/gi, "Cool your CPU like a pro!")
+    .replace(/Päästä DDR5:n suorituskyky valloilleen\./gi, "Unleash DDR5 performance.")
+    .replace(/Äärimmäinen SSD!/gi, "Extreme SSD performance!")
+    .replace(/Muunna pelitilasi!/gi, "Transform your gaming space!")
+    .replace(/Valjasta ukkonen käyttöösi!/gi, "Harness the thunder!")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function stripHtml(html) {
@@ -948,7 +1012,7 @@ function detectPackageType(text) {
 
 function detectColorDescriptor(text) {
   const match = text.match(/,\s*([^,]*(?:musta|valkoinen|hopea|harmaa|punainen|sininen|kulta)[^,]*)$/i);
-  return match ? match[1].trim() : null;
+  return match ? translateColorName(match[1].trim()) : null;
 }
 
 function detectMemorySpeed(text) {
@@ -1713,7 +1777,7 @@ async function estimateGameBenchmarks(parts) {
 }
 
 function mapApiProduct(apiProduct, category) {
-  const name = [apiProduct.VendorName, apiProduct.Name].filter(Boolean).join(" ");
+  const name = translateCatalogText([apiProduct.VendorName, apiProduct.Name].filter(Boolean).join(" "));
   const displayName = buildDisplayName(apiProduct, category);
   const item = {
     id: `${category}-${apiProduct.Code || apiProduct.ProductGuid || name}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
@@ -1723,16 +1787,16 @@ function mapApiProduct(apiProduct, category) {
     brand: apiProduct.VendorName || "",
     sku: apiProduct.Code || "",
     price: formatEuro(apiProduct.PriceTax ?? apiProduct.Price),
-    availability: apiProduct.DeliveryInfoText || apiProduct.DeliveryDurationText || "Check live stock on Jimms.fi",
-    description: apiProduct.LongName || apiProduct.ProductGroupName || categories[category].label,
+    availability: translateAvailability(apiProduct.DeliveryInfoText || apiProduct.DeliveryDurationText || "Check live stock on Jimms.fi"),
+    description: translateCatalogText(apiProduct.LongName || apiProduct.ProductGroupName || categories[category].label),
     image: apiProduct.ImageID && apiProduct.ImageBaseSrc
       ? `${apiProduct.ImageBaseSrc.replace(/^\/\//, "https://")}${apiProduct.ImageID}-ig400gg.jpg`
       : "",
     sourceUrl: apiProduct.Uri ? `${JIMMS_BASE}/fi/${apiProduct.Uri}` : `${JIMMS_BASE}${categories[category].url}`,
     productId: apiProduct.ProductID || null,
     productGuid: apiProduct.ProductGuid || null,
-    productGroupName: apiProduct.ProductGroupName || "",
-    productGroupFullName: (apiProduct.ProductGroupFullName || "").replace(/\|\|/g, " / ")
+    productGroupName: translateCatalogText(apiProduct.ProductGroupName || ""),
+    productGroupFullName: translateCatalogText((apiProduct.ProductGroupFullName || "").replace(/\|\|/g, " / "))
   };
   item.specs = deriveSpecs(item);
   return item;
