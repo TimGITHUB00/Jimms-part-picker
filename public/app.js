@@ -705,6 +705,10 @@ function renderProducts() {
       visual.innerHTML = `<img src="${escapeHtml(product.image)}" alt="">`;
     }
     renderSpecTags(card, product);
+    const openLink = card.querySelector(".product-action-buttons a");
+    if (openLink) {
+      openLink.href = product.sourceUrl || jimmsUrls[product.category] || "https://www.jimms.fi";
+    }
     card.querySelector("button").addEventListener("click", () => {
       const slot = selectableCategoryForProduct(product.category);
       state.selected[slot] = product;

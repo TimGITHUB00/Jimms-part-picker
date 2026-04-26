@@ -980,6 +980,20 @@ h2 {
   font-size: 1.15rem;
 }
 
+.product-action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.product-action-buttons .ghost-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .product-actions button {
   min-width: 86px;
   min-height: 40px;

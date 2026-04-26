@@ -216,12 +216,19 @@ function translateAvailability(value) {
     .replace(/Varastossa yli\s*(\d+)\s*kpl/gi, "In stock, over $1 units")
     .replace(/Varastossa\s*(\d+)\s*kpl/gi, "In stock, $1 units")
     .replace(/Varastossa/gi, "In stock")
+    .replace(/Loppuunmyyty/gi, "Sold out")
+    .replace(/Tulossa,\s*arvio\s*([0-9]{1,2}\.[0-9]{1,2})/gi, "Incoming, estimated $1")
     .replace(/Tulossa varastoon/gi, "Incoming stock")
+    .replace(/Tulossa/gi, "Incoming")
     .replace(/Tilattavissa/gi, "Available to order")
     .replace(/Ennakkotilattavissa/gi, "Pre-order")
     .replace(/Loppu varastosta/gi, "Out of stock")
     .replace(/Ei varastossa/gi, "Out of stock")
+    .replace(/Ei vahvistettu/gi, "Unconfirmed")
+    .replace(/Ei myynnissä/gi, "Not for sale")
     .replace(/Toimitusaika/gi, "Lead time")
+    .replace(/arkipäivää/gi, "business days")
+    .replace(/arkipäivä/gi, "business day")
     .replace(/Heti lähetettävissä/gi, "Ready to ship")
     .replace(/Myymäläsaatavuus/gi, "Store availability")
     .replace(/Arvioitu toimitus/gi, "Estimated delivery");
@@ -1548,7 +1555,7 @@ function buildGpuMarketSpecs(item) {
   return {
     gpuModel: marketEntry.name,
     performanceIndex: marketEntry.performanceIndex,
-    rayTracingIndex: marketEntry.rayTracingIndex,
+    rayTracingIndex: Math.min(100, Number(marketEntry.rayTracingIndex || 0)),
     vramGb: detectedVram || marketEntry.vramGb,
     boardPowerW: marketEntry.boardPowerW,
     targetResolution: marketEntry.targetResolution,
