@@ -61,6 +61,7 @@ const specFilter = document.querySelector("#specFilter");
 const minPriceFilter = document.querySelector("#minPriceFilter");
 const maxPriceFilter = document.querySelector("#maxPriceFilter");
 const stockFilter = document.querySelector("#stockFilter");
+const compatibleFilter = document.querySelector("#compatibleFilter");
 const totalPrice = document.querySelector("#totalPrice");
 const catalogTitle = document.querySelector("#catalogTitle");
 const catalogMeta = document.querySelector("#catalogMeta");
@@ -600,6 +601,7 @@ function resetFilters() {
   minPriceFilter.value = "";
   maxPriceFilter.value = "";
   stockFilter.checked = false;
+  if (compatibleFilter) compatibleFilter.checked = false;
 }
 
 function renderTabs() {
@@ -681,6 +683,7 @@ function renderPartRows() {
   updateBuildNameInput();
   savedBuildButtonLabel();
   persistCurrentBuild();
+  refreshFilteredProducts();
 }
 
 function renderProducts() {
@@ -841,6 +844,7 @@ function applyProductFilters() {
   const min = Number.parseFloat(minPriceFilter.value);
   const max = Number.parseFloat(maxPriceFilter.value);
   const inStockOnly = stockFilter.checked;
+  const compatibleOnly = compatibleFilter?.checked === true;
 
   let products = [...state.products];
 
@@ -862,6 +866,10 @@ function applyProductFilters() {
 
   if (inStockOnly) {
     products = products.filter((item) => /in stock/i.test(item.availability || ""));
+  }
+
+  if (compatibleOnly) {
+    products = products.filter((item) => isProductCompatibleWithCurrentBuild(item));
   }
 
   products.sort((a, b) => {
@@ -1356,7 +1364,17 @@ function compareDimensionFit(checks, itemLabel, itemSize, limitLabel, limitSize,
 }
 
 function updateCompatibility() {
-  const parts = state.selected;
+  renderCompatibility(buildCompatibilityChecks(state.selected));
+}
+
+function isProductCompatibleWithCurrentBuild(product) {
+  const slot = selectableCategoryForProduct(product.category);
+  const nextParts = cloneBuildParts(state.selected);
+  nextParts[slot] = product;
+  return !buildCompatibilityChecks(nextParts).some((check) => check.type === "error");
+}
+
+function buildCompatibilityChecks(parts) {
   const checks = [];
 
   if (!Object.values(parts).some(Boolean)) {
@@ -1569,7 +1587,7 @@ function updateCompatibility() {
     }
   }
 
-  renderCompatibility(checks);
+  return checks;
 }
 
 function renderCompatibility(checks) {
@@ -1617,7 +1635,7 @@ bindEvent(searchInput, "input", () => {
   searchTimer = setTimeout(loadProducts, 280);
 });
 
-[sortSelect, brandFilter, specFilter, minPriceFilter, maxPriceFilter, stockFilter].forEach((control) => {
+[sortSelect, brandFilter, specFilter, minPriceFilter, maxPriceFilter, stockFilter, compatibleFilter].forEach((control) => {
   if (!control) return;
   control.addEventListener("input", refreshFilteredProducts);
   control.addEventListener("change", refreshFilteredProducts);
